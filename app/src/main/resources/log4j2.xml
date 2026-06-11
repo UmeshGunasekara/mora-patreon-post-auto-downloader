@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ * Created by IntelliJ IDEA.
+ * Language: XML
+ * Property of Umesh Gunasekara
+ * @Author: SLMORA
+ * @DateTime: 06/11/2026 12:00 AM
+ *
+ * This log4j2.xml comes with basic log4j2 configuration for mora-patreon-post-auto-downloader Project
+ *
+ * Version      Date            Editor              Note
+ * ======================================================
+ * 1.0			06/11/2026		SLMORA              Initial Code
+ *
+-->
+<Configuration status="WARN" monitorInterval="30">
+
+    <Properties>
+<!--        <Property name="LOG_PATTERN">%d{'D-'yyyy-MM-dd 'T-'HH:mm:ss.SSS 'Z'Z} &#45;&#45; [T_ID-%tid | T_NAME-%tn] [%p] [Class - %C | Method - %M | Line - %L] %m%n</Property>-->
+<!--        <Property name="LOG_PATTERN">[%d{'D : 'yyyy-MM-dd 'T : 'HH:mm:ss.SSS 'Z : 'Z}] [T_ID : %tid | T_NAME : %tn] [%p] %m%n</Property>-->
+        <Property name="LOG_PATTERN">[%d{'D : 'yyyy-MM-dd 'T : 'HH:mm:ss.SSS 'Z : 'Z}] [%p] %m%n</Property>
+        <Property name="LOG_DIR">D:/SLMORAWorkSpace/IntelliJProjects/slmora-project/mora-patreon-post-auto-downloader/logs</Property>
+        <Property name="PROJECT_NAME">mora-patreon-post-auto-downloader</Property>
+    </Properties>
+
+    <Appenders>
+        <!-- Console Appender -->
+        <Console name="logToConsole" target="SYSTEM_OUT" follow="true">
+            <PatternLayout pattern="${LOG_PATTERN}" />
+        </Console>
+
+        <!-- Sys log: all logs -->
+        <RollingFile name="sysLog" fileName="${LOG_DIR}/${PROJECT_NAME}-sys.log"
+                     filePattern="${LOG_DIR}/$${date:yyy-MM-dd}/${PROJECT_NAME}-debug.%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="50 MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="100"/>
+        </RollingFile>
+
+        <!-- Debug only -->
+        <RollingFile name="debugLog" fileName="${LOG_DIR}/${PROJECT_NAME}-debug.log"
+                     filePattern="${LOG_DIR}/$${date:yyy-MM-dd}/${PROJECT_NAME}-debug.%d{yyyy-MM-dd}-%i.log">
+            <LevelRangeFilter minLevel="DEBUG" maxLevel="DEBUG" onMatch="ACCEPT" onMismatch="DENY"/>
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="50 MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="100"/>
+        </RollingFile>
+
+        <!-- Info only -->
+        <RollingFile name="infoLog" fileName="${LOG_DIR}/${PROJECT_NAME}-info.log"
+                     filePattern="${LOG_DIR}/$${date:yyy-MM-dd}/${PROJECT_NAME}-info.%d{yyyy-MM-dd}-%i.log">
+            <LevelRangeFilter minLevel="INFO" maxLevel="INFO" onMatch="ACCEPT" onMismatch="DENY"/>
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="50 MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="100"/>
+        </RollingFile>
+
+        <!-- Marker-based: Transaction only -->
+        <RollingFile name="transactionLogs" fileName="${LOG_DIR}/${PROJECT_NAME}-transaction.log"
+                     filePattern="${LOG_DIR}/$${date:yyy-MM-dd}/${PROJECT_NAME}-transaction.%d{yyyy-MM-dd}-%i.log">
+            <!--            <LevelRangeFilter minLevel="INFO" maxLevel="INFO" onMatch="ACCEPT" onMismatch="DENY"/>-->
+            <MarkerFilter marker="TRANSACTION" onMatch="ACCEPT" onMismatch="DENY"/>
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="50 MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="100"/>
+        </RollingFile>
+
+        <!-- Error only -->
+        <RollingFile name="errorLog" fileName="${LOG_DIR}/${PROJECT_NAME}-error.log"
+                     filePattern="${LOG_DIR}/$${date:yyy-MM-dd}/${PROJECT_NAME}-error.%d{yyyy-MM-dd}-%i.log">
+            <LevelRangeFilter minLevel="ERROR" maxLevel="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="50 MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="100"/>
+        </RollingFile>
+
+<!--        <Async name="Async">-->
+<!--            <AppenderRef ref="debugLog" />-->
+<!--            <AppenderRef ref="infoLog" />-->
+<!--            <AppenderRef ref="errorLog" />-->
+<!--            <AppenderRef ref="transactionLogs" />-->
+<!--        </Async>-->
+    </Appenders>
+
+<!--    <Loggers>-->
+<!--        <Logger name="com.slmora" additivity="false" >-->
+<!--            <AppenderRef ref="logToConsole" />-->
+<!--            &lt;!&ndash;            <AppenderRef ref="debugLog" />&ndash;&gt;-->
+<!--            &lt;!&ndash;            <AppenderRef ref="infoLog" />&ndash;&gt;-->
+<!--            &lt;!&ndash;            <AppenderRef ref="errorLog" />&ndash;&gt;-->
+<!--            <AppenderRef ref="Async" />-->
+<!--        </Logger>-->
+<!--        &lt;!&ndash;        <Root level="error">&ndash;&gt;-->
+<!--        &lt;!&ndash;            <AppenderRef ref="logToConsole" />&ndash;&gt;-->
+<!--        &lt;!&ndash;            <AppenderRef ref="debugLog" />&ndash;&gt;-->
+<!--        &lt;!&ndash;        </Root>&ndash;&gt;-->
+<!--        <Root level="all">-->
+<!--            <AppenderRef ref="logToConsole" />-->
+<!--        </Root>-->
+<!--    </Loggers>-->
+
+    <Loggers>
+        <!-- Your Application Package -->
+        <!--        <AsyncRoot level="${LOG_LEVEL_ROOT}">-->
+        <!--            <AppenderRef ref="Console"/>-->
+        <!--            <AppenderRef ref="SelectSYSOUTFile"/>-->
+        <!--            <AppenderRef ref="SelectSingleFile"/>-->
+        <!--            <AppenderRef ref="SelectINFOFile"/>-->
+        <!--            <AppenderRef ref="SelectDEBUGFile"/>-->
+        <!--            <AppenderRef ref="SelectWARNFile"/>-->
+        <!--            <AppenderRef ref="SelectERRORFile"/>-->
+        <!--        </AsyncRoot>-->
+        <Logger name="com.slmora" level="all" additivity="false">
+            <AppenderRef ref="logToConsole"/>
+            <AppenderRef ref="sysLog"/>
+            <AppenderRef ref="debugLog"/>
+            <AppenderRef ref="infoLog"/>
+            <AppenderRef ref="errorLog"/>
+            <AppenderRef ref="transactionLogs"/>
+        </Logger>
+
+        <!-- Fallback root logger (for 3rd party libs etc.) -->
+        <Root level="all">
+            <AppenderRef ref="logToConsole"/>
+            <AppenderRef ref="sysLog"/>
+            <AppenderRef ref="debugLog"/>
+            <AppenderRef ref="infoLog"/>
+            <AppenderRef ref="errorLog"/>
+            <AppenderRef ref="transactionLogs"/>
+        </Root>
+    </Loggers>
+</Configuration>

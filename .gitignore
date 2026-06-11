@@ -6,3 +6,23 @@ build
 
 # Ignore Kotlin plugin data
 .kotlin
+
+#Build
+/target
+
+#Lib
+
+#Log
+*.log
+/log
+/checkstyleidea.tmp
+
+#SVN
+*.orig
+
+#Java
+*.class
+
+#Jetbrains
+*.iml
+.idea

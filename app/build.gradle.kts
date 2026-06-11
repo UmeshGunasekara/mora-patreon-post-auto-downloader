@@ -3,21 +3,117 @@
  *
  * This generated file contains a sample Java application project to get you started.
  * For more details on building Java & JVM projects, please refer to https://docs.gradle.org/9.5.1/userguide/building_java_projects.html in the Gradle documentation.
+ *
+ *
+ * This build.gradle.kts comes with basic dependency requirements and create for mora-patreon-post-auto-downloader Project
+ *
+ * Version      Date            Editor              Note
+ * ------------------------------------------------------
+ * 1.0			06/11/2022		SLMORA              Initial Code
+ *
  */
+
+import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.tasks.Jar
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import org.gradle.api.publish.maven.MavenPublication
 
 plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
     application
+    java
+    idea
+    `maven-publish`
+}
+
+//Project Artifact Information
+group = "com.slmora.patreonpostautodownloader"
+version = "1.0-SNAPSHOT"
+description = "mora-patreon-post-auto-downloader"
+
+//Developer and Organization Information
+val developerName = "Umesh Gunasekara"
+val developerEmail = "umesh.gunasekara.n@gmail.com"
+val developerCompany = "Eryxon"
+val developerCompanyUrl = "http://www.eryxon.com"
+val developerUrl = "http://www.umeshgunasekara.com"
+val organizationName = "Eryxon"
+val organizationUrl = "http://www.eryxon.com"
+val projectUrl = "http://www.slmora.com/mora-patreon-post-auto-downloader"
+
+// Custom build metadata (replacement for ext { ... })
+val projectName = "MoraPatreonPostAutoDownloader"
+val createdBy = "$version (Eryxon)"
+val builtBy = "SLMORA"
+val builtJDK = "21"
+val mainClassNameLegacy = "com.slmora.patreonpostautodownloader.sandbox.app.App"
+
+val buildDate = LocalDateTime.now().format(
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+)
+
+configurations {
+    compileOnly {
+        extendsFrom(configurations.annotationProcessor.get())
+    }
 }
 
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
+
+    // Keep this if mora-common-logging is installed in your local Maven repository.
+    // Remove it if you publish that dependency to a private repository instead.
+    mavenLocal()
 }
 
+val log4jVersion = "2.24.3"
+val junitJupiterVersion = "5.11.4"
+
 dependencies {
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
+
+    implementation("com.microsoft.playwright:playwright:1.54.0")
+
+    // Mora Common Dependencies
+    implementation("com.slmora.common.logging:mora-common-logging:3.1")
+
+    // Log4j Logging Dependencies
+    implementation("org.apache.logging.log4j:log4j-core:${log4jVersion}")
+    implementation("org.apache.logging.log4j:log4j-api:${log4jVersion}")
+    testImplementation("org.apache.logging.log4j:log4j-slf4j2-impl:${log4jVersion}")
+
+    // Apache Commons Dependencies
+    implementation("org.apache.commons:commons-lang3:3.17.0")
+
+    // Lombok - Maven provided scope equivalent
+    compileOnly("org.projectlombok:lombok:1.18.36")
+    annotationProcessor("org.projectlombok:lombok:1.18.36")
+    testCompileOnly("org.projectlombok:lombok:1.18.36")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.36")
+
+    // JUnit Jupiter For Testing
+    testImplementation("org.junit.jupiter:junit-jupiter-api:${junitJupiterVersion}")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitJupiterVersion}")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:${junitJupiterVersion}")
+
+    // Excel
+    implementation("org.apache.poi:poi-ooxml:5.4.0")
+
+    // Jackson
+    implementation("tools.jackson.core:jackson-databind:3.1.0")
+
+    // docx4j
+    implementation("org.docx4j:docx4j-core:11.5.11")
+    implementation("org.docx4j:docx4j-openxml-objects:11.5.11")
+    implementation("org.docx4j:docx4j-JAXB-ReferenceImpl:11.5.11")
+
     // Use JUnit Jupiter for testing.
-    testImplementation(libs.junit.jupiter)
+//    testImplementation(libs.junit.jupiter)
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
@@ -34,10 +130,177 @@ java {
 
 application {
     // Define the main class for the application.
-    mainClass = "org.example.App"
+    mainClass = "com.slmora.patreonpostautodownloader.app.App"
+}
+
+configure<SourceSetContainer> {
+    named("main") {
+        java.setSrcDirs(listOf("src/main/java", "src/generated/java"))
+        resources.setSrcDirs(listOf("src/main/resources"))
+    }
+    named("test") {
+        java.setSrcDirs(listOf("src/test/java"))
+        resources.setSrcDirs(listOf("src/test/resources"))
+    }
 }
 
 tasks.named<Test>("test") {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+    options.release = 21
+}
+
+// Fat-jar style packaging + manifest customization
+tasks.named<Jar>("jar") {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes(
+            mapOf(
+                "Implementation-Title" to "Gradle Jar File Example",
+                "Implementation-Version" to version.toString(),
+                "Implementation-Vendor" to "SLMORA",
+                "Developer-Name" to developerName,
+                "Developer-Email" to developerEmail,
+                "Developer-Company" to developerCompany,
+                "Organization" to organizationName,
+                "Organization-Url" to organizationUrl,
+                "Project-Name" to projectName,
+                "Project-URL" to projectUrl,
+                "Manifest-Version" to version.toString(),
+                "Created-By" to createdBy,
+                "Built-By" to builtBy,
+                "Build-Jdk" to builtJDK,
+                "Build-Date" to buildDate,
+                "Main-Class" to mainClassNameLegacy
+            )
+        )
+    }
+
+    exclude("META-INF/*.RSA", "META-INF/*.SF", "META-INF/*.DSA")
+    archiveBaseName.set("mora-patreon-post-auto-downloader")
+
+//    from(
+//        configurations.compileClasspath.get().map { if (it.isDirectory) it else zipTree(it) }
+//    )
+    from({
+        configurations.runtimeClasspath.get()
+            .filter { it.exists() }
+            .map { if (it.isDirectory) it else zipTree(it) }
+    })
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("mavenJava") {
+            from(components["java"])
+
+            groupId = group.toString()
+            artifactId = description.toString()
+            version = version.toString()
+
+            pom {
+                name.set(projectName)
+                description.set(description.toString())
+                url.set(projectUrl)
+                packaging = "jar"
+
+                organization {
+                    name.set(organizationName)
+                    url.set(organizationUrl)
+                }
+
+                developers {
+                    developer {
+                        id.set("SLMORA")
+                        name.set(developerName)
+                        email.set(developerEmail)
+                        url.set(developerUrl)
+                        organization.set(developerCompany)
+                        organizationUrl.set(developerCompanyUrl)
+                        roles.set(listOf("owner", "architect", "developer"))
+                        timezone.set("Asia/Colombo")
+                        properties.set(
+                            mapOf(
+                                "picUrl" to "https://avatars.githubusercontent.com/u/12097282?v=4"
+                            )
+                        )
+                    }
+                }
+
+                properties.set(
+                    mapOf(
+                        "project.build.sourceEncoding" to "UTF-8",
+                        "maven.compiler.source" to "21",
+                        "maven.compiler.target" to "21",
+                        "apache.logging.log4j.version" to log4jVersion,
+                        "junit.jupiter.version" to junitJupiterVersion
+                    )
+                )
+
+                withXml {
+                    val root = asNode()
+
+                    val buildNode = root.appendNode("build")
+                    buildNode.appendNode("directory", "\${project.basedir}/target")
+                    buildNode.appendNode("outputDirectory", "\${project.build.directory}/classes")
+                    buildNode.appendNode("finalName", "MoraPatreonPostAutoDownloader")
+                    buildNode.appendNode("testOutputDirectory", "\${project.build.directory}/test-classes")
+                    buildNode.appendNode("sourceDirectory", "\${project.basedir}/src/main/java")
+                    buildNode.appendNode("testSourceDirectory", "\${project.basedir}/src/test/java")
+
+                    val pluginManagement = buildNode.appendNode("pluginManagement")
+                    val pmPlugins = pluginManagement.appendNode("plugins")
+
+                    val pmCompiler = pmPlugins.appendNode("plugin")
+                    pmCompiler.appendNode("groupId", "org.apache.maven.plugins")
+                    pmCompiler.appendNode("artifactId", "maven-compiler-plugin")
+                    pmCompiler.appendNode("version", "3.13.0")
+                    val pmCompilerConfig = pmCompiler.appendNode("configuration")
+                    pmCompilerConfig.appendNode("release", "21")
+                    pmCompilerConfig.appendNode("outputFileName", "MoraPatreonPostAutoDownloader")
+
+                    val pmSurefire = pmPlugins.appendNode("plugin")
+                    pmSurefire.appendNode("groupId", "org.apache.maven.plugins")
+                    pmSurefire.appendNode("artifactId", "maven-surefire-plugin")
+                    pmSurefire.appendNode("version", "3.5.2")
+
+                    val plugins = buildNode.appendNode("plugins")
+
+                    val compiler = plugins.appendNode("plugin")
+                    compiler.appendNode("groupId", "org.apache.maven.plugins")
+                    compiler.appendNode("artifactId", "maven-compiler-plugin")
+                    compiler.appendNode("version", "3.13.0")
+                    val compilerConfig = compiler.appendNode("configuration")
+                    compilerConfig.appendNode("release", "21")
+                    compilerConfig.appendNode("outputFileName", "MoraPatreonPostAutoDownloader")
+
+                    val surefire = plugins.appendNode("plugin")
+                    surefire.appendNode("groupId", "org.apache.maven.plugins")
+                    surefire.appendNode("artifactId", "maven-surefire-plugin")
+                    surefire.appendNode("version", "3.5.2")
+                    val surefireConfig = surefire.appendNode("configuration")
+                    val excludes = surefireConfig.appendNode("excludes")
+                    excludes.appendNode("exclude", "**/Math*Test.java")
+
+                    val toolchains = plugins.appendNode("plugin")
+                    toolchains.appendNode("groupId", "org.apache.maven.plugins")
+                    toolchains.appendNode("artifactId", "maven-toolchains-plugin")
+                    toolchains.appendNode("version", "3.2.0")
+                    val executions = toolchains.appendNode("executions")
+                    val execution = executions.appendNode("execution")
+                    val goals = execution.appendNode("goals")
+                    goals.appendNode("goal", "toolchain")
+                    val config = execution.appendNode("configuration")
+                    val toolchainsNode = config.appendNode("toolchains")
+                    val jdk = toolchainsNode.appendNode("jdk")
+                    jdk.appendNode("version", "21")
+                }
+            }
+        }
+    }
 }
