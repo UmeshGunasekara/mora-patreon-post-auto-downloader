@@ -15,10 +15,10 @@ import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.pipeline.ExcelPipeline;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineState;
-import com.slmora.patreonpostautodownloader.process.ProcessAExcelProducer;
-import com.slmora.patreonpostautodownloader.process.ProcessBImageDownloadWorker;
-import com.slmora.patreonpostautodownloader.process.ProcessCDocxProducer;
-import com.slmora.patreonpostautodownloader.process.RetryProcess;
+import com.slmora.patreonpostautodownloader.process.ProcessExcelProducer;
+import com.slmora.patreonpostautodownloader.process.ProcessImageDownloadWorker;
+import com.slmora.patreonpostautodownloader.process.ProcessDocxProducer;
+import com.slmora.patreonpostautodownloader.process.ProcessRetry;
 import com.slmora.patreonpostautodownloader.service.DocxService;
 import com.slmora.patreonpostautodownloader.service.ExcelService;
 import com.slmora.patreonpostautodownloader.service.ImageDownloadService;
@@ -26,8 +26,8 @@ import com.slmora.patreonpostautodownloader.service.JobPersistenceService;
 import com.slmora.patreonpostautodownloader.service.RetryService;
 import com.slmora.patreonpostautodownloader.service.UrlExecutionService;
 
+import java.io.IOException;
 import java.nio.file.Files;
-import java.util.List;
 
 /**
  * The {@code PipelineApplication} Class created for
@@ -57,16 +57,17 @@ import java.util.List;
  * <br>1.0          6/6/2026      SLMORA                Initial Code
  * </pre></blockquote>
  */
-public class PipelineApplication
+public class PatreonPostDownloadPipelineController
 {
-    private final static MoraLogger LOGGER = MoraLogger.getLogger(PipelineApplication.class);
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(PatreonPostDownloadPipelineController.class);
 
-    public static void main(String[] args) throws Exception {
+    public void execute() throws IOException
+    {
 
         PipelineConfig config = new PipelineConfig();
 
-        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                Thread.currentThread().getId(),
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                Thread.currentThread().threadId(),
                 Thread.currentThread().getStackTrace()),"Load Configuration \n {}", config);
 
         Files.createDirectories(config.excelOutputDir);
@@ -74,12 +75,17 @@ public class PipelineApplication
         Files.createDirectories(config.docxOutputDir);
         Files.createDirectories(config.failedOutputDir);
 
-        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                Thread.currentThread().getId(),
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                Thread.currentThread().threadId(),
                 Thread.currentThread().getStackTrace()),"Created output directories if not exist");
 
         PipelineQueues queues = new PipelineQueues(config);
         PipelineState state = new PipelineState();
+
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                Thread.currentThread().threadId(),
+                Thread.currentThread().getStackTrace()),"Configuration, Queues and State initialized");
+
 
         UrlExecutionService urlExecutionService = new UrlExecutionService();
         ExcelService excelService = new ExcelService();
@@ -89,8 +95,12 @@ public class PipelineApplication
         JobPersistenceService jobPersistenceService = new JobPersistenceService(config);
         RetryService retryService = new RetryService(config, queues);
 
-        ProcessAExcelProducer processA =
-                new ProcessAExcelProducer(
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                Thread.currentThread().threadId(),
+                Thread.currentThread().getStackTrace()),"Service initialized");
+
+        ProcessExcelProducer excelProducer =
+                new ProcessExcelProducer(
                         config,
                         queues,
                         state,
@@ -99,8 +109,8 @@ public class PipelineApplication
                         jobPersistenceService
                 );
 
-        ProcessBImageDownloadWorker processB =
-                new ProcessBImageDownloadWorker(
+        ProcessImageDownloadWorker imageDownloadWorker =
+                new ProcessImageDownloadWorker(
                         config,
                         queues,
                         state,
@@ -109,8 +119,8 @@ public class PipelineApplication
                         retryService
                 );
 
-        RetryProcess retryProcess =
-                new RetryProcess(
+        ProcessRetry retryProcess =
+                new ProcessRetry(
                         config,
                         queues,
                         state,
@@ -118,8 +128,8 @@ public class PipelineApplication
                         retryService
                 );
 
-        ProcessCDocxProducer processC =
-                new ProcessCDocxProducer(
+        ProcessDocxProducer docxProducer =
+                new ProcessDocxProducer(
                         config,
                         queues,
                         state,
@@ -137,10 +147,10 @@ public class PipelineApplication
 
         ExcelPipeline pipeline =
                 new ExcelPipeline(
-                        processA,
-                        processB,
+                        excelProducer,
+                        imageDownloadWorker,
                         retryProcess,
-                        processC,
+                        docxProducer,
                         failedJobMonitor
                 );
 

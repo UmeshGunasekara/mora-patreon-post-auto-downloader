@@ -64,9 +64,9 @@ public class FailedJobMonitor
                 ExcelJob job = queues.failedQueue().poll(2, TimeUnit.SECONDS);
 
                 if (job == null) {
-                    if (state.isProcessBFinished()
-                            && state.isRetryFinished()
-                            && state.isProcessCFinished()
+                    if (state.isProcessImageDownloadWorkerFinished()
+                            && state.isProcessRetryFinished()
+                            && state.isProcessDocxProducerFinished()
                             && queues.failedQueue().isEmpty()) {
                         break;
                     }

@@ -8,12 +8,11 @@
 package com.slmora.patreonpostautodownloader.pipeline;
 
 import com.slmora.patreonpostautodownloader.process.FailedJobMonitor;
-import com.slmora.patreonpostautodownloader.process.ProcessAExcelProducer;
-import com.slmora.patreonpostautodownloader.process.ProcessBImageDownloadWorker;
-import com.slmora.patreonpostautodownloader.process.ProcessCDocxProducer;
-import com.slmora.patreonpostautodownloader.process.RetryProcess;
+import com.slmora.patreonpostautodownloader.process.ProcessExcelProducer;
+import com.slmora.patreonpostautodownloader.process.ProcessImageDownloadWorker;
+import com.slmora.patreonpostautodownloader.process.ProcessDocxProducer;
+import com.slmora.patreonpostautodownloader.process.ProcessRetry;
 
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -47,33 +46,33 @@ import java.util.concurrent.Executors;
  */
 public class ExcelPipeline
 {
-    private final ProcessAExcelProducer processA;
-    private final ProcessBImageDownloadWorker processB;
-    private final RetryProcess retryProcess;
-    private final ProcessCDocxProducer processC;
+    private final ProcessExcelProducer excelProducer;
+    private final ProcessImageDownloadWorker imageDownloadWorker;
+    private final ProcessRetry retryProcess;
+    private final ProcessDocxProducer docxProducer;
     private final FailedJobMonitor failedJobMonitor;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(5);
 
     public ExcelPipeline(
-            ProcessAExcelProducer processA,
-            ProcessBImageDownloadWorker processB,
-            RetryProcess retryProcess,
-            ProcessCDocxProducer processC,
+            ProcessExcelProducer excelProducer,
+            ProcessImageDownloadWorker imageDownloadWorker,
+            ProcessRetry retryProcess,
+            ProcessDocxProducer docxProducer,
             FailedJobMonitor failedJobMonitor
     ) {
-        this.processA = processA;
-        this.processB = processB;
+        this.excelProducer = excelProducer;
+        this.imageDownloadWorker = imageDownloadWorker;
         this.retryProcess = retryProcess;
-        this.processC = processC;
+        this.docxProducer = docxProducer;
         this.failedJobMonitor = failedJobMonitor;
     }
 
     public void start() {
-        executor.submit(processA::start);
-        executor.submit(processB::start);
+        executor.submit(excelProducer::start);
+        executor.submit(imageDownloadWorker::start);
         executor.submit(retryProcess::start);
-        executor.submit(processC::start);
+        executor.submit(docxProducer::start);
         executor.submit(failedJobMonitor::start);
 
         executor.shutdown();

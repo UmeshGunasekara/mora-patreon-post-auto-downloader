@@ -264,6 +264,18 @@ public class ExcelService
         return map;
     }
 
+    /**
+     * Returns a trimmed string value for the requested column in the given row.
+     *
+     * <p>If the column does not exist in the header mapping or the cell is missing,
+     * an empty string is returned.</p>
+     *
+     * @param row the Excel row containing data
+     * @param columnMap mapping of column names to column indexes
+     * @param columnName the target column name to read
+     * @param formatter the formatter used to convert cell content to text
+     * @return trimmed cell text, or an empty string when unavailable
+     */
     private String getCellValue(Row row, Map<String, Integer> columnMap, String columnName, DataFormatter formatter) {
         Integer colIndex = columnMap.get(columnName);
         if (colIndex == null) {

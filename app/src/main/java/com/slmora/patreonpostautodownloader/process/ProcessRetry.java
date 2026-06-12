@@ -46,7 +46,7 @@ import java.util.concurrent.TimeUnit;
  * <br>1.0          6/6/2026      SLMORA                Initial Code
  * </pre></blockquote>
  */
-public class RetryProcess
+public class ProcessRetry
 {
     private final PipelineConfig config;
     private final PipelineQueues queues;
@@ -54,7 +54,7 @@ public class RetryProcess
     private final ImageDownloadService imageDownloadService;
     private final RetryService retryService;
 
-    public RetryProcess(
+    public ProcessRetry(
             PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
@@ -74,7 +74,7 @@ public class RetryProcess
                 ExcelJob job = queues.retryQueue().poll(2, TimeUnit.SECONDS);
 
                 if (job == null) {
-                    if (state.isProcessBFinished() && queues.retryQueue().isEmpty()) {
+                    if (state.isProcessImageDownloadWorkerFinished() && queues.retryQueue().isEmpty()) {
                         break;
                     }
                     continue;
@@ -87,7 +87,7 @@ public class RetryProcess
             }
         }
 
-        state.setRetryFinished(true);
+        state.setProcessRetryFinished(true);
         System.out.println("Retry process finished.");
     }
 

@@ -40,8 +40,8 @@ import lombok.Data;
 @Data
 public class PipelineState
 {
-    private volatile boolean processAFinished;
-    private volatile boolean processBFinished;
-    private volatile boolean retryFinished;
-    private volatile boolean processCFinished;
+    private volatile boolean processExcelProducerFinished;
+    private volatile boolean processImageDownloadWorkerFinished;
+    private volatile boolean processRetryFinished;
+    private volatile boolean processDocxProducerFinished;
 }

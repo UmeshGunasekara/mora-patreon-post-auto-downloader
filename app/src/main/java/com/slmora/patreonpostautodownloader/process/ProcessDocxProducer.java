@@ -48,7 +48,7 @@ import java.util.concurrent.TimeUnit;
  * <br>1.0          6/6/2026      SLMORA                Initial Code
  * </pre></blockquote>
  */
-public class ProcessCDocxProducer
+public class ProcessDocxProducer
 {
     private final PipelineConfig config;
     private final PipelineQueues queues;
@@ -59,7 +59,7 @@ public class ProcessCDocxProducer
 
     private final ExecutorService processCPool;
 
-    public ProcessCDocxProducer(
+    public ProcessDocxProducer(
             PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
@@ -89,7 +89,7 @@ public class ProcessCDocxProducer
             Thread.currentThread().interrupt();
         }
 
-        state.setProcessCFinished(true);
+        state.setProcessDocxProducerFinished(true);
         System.out.println("Process C finished.");
     }
 
@@ -99,8 +99,8 @@ public class ProcessCDocxProducer
                 ExcelJob job = queues.docxReadyQueue().poll(2, TimeUnit.SECONDS);
 
                 if (job == null) {
-                    if (state.isProcessBFinished()
-                            && state.isRetryFinished()
+                    if (state.isProcessImageDownloadWorkerFinished()
+                            && state.isProcessRetryFinished()
                             && queues.docxReadyQueue().isEmpty()) {
                         break;
                     }

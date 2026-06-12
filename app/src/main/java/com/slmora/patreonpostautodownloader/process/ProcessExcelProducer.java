@@ -21,11 +21,11 @@ import com.slmora.patreonpostautodownloader.service.JobPersistenceService;
 import com.slmora.patreonpostautodownloader.service.UrlExecutionService;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,17 +58,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * <br>1.0          6/6/2026      SLMORA                Initial Code
  * </pre></blockquote>
  */
-public class ProcessAExcelProducer
+public class ProcessExcelProducer
 {
-
-    private final static MoraLogger LOGGER = MoraLogger.getLogger(ProcessAExcelProducer.class);
-
-    private final String urlInputPath = "E:\\MORA\\MyBusiness\\Investment\\JU\\AUTO\\input_url.txt";
-    String outputDirPath = "E:\\MORA\\MyBusiness\\Investment\\JU\\AUTO\\";
-    String fileName = "patreon_posts_output_temp.xlsx";
-    String sheetName = "Posts"; // or specify your sheet name
-
-
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(ProcessExcelProducer.class);
 
     private final PipelineConfig config;
     private final PipelineQueues queues;
@@ -79,7 +71,7 @@ public class ProcessAExcelProducer
 
     private final AtomicLong jobIdGenerator = new AtomicLong(1);
 
-    public ProcessAExcelProducer(
+    public ProcessExcelProducer(
             PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
@@ -98,20 +90,24 @@ public class ProcessAExcelProducer
     public void start() {
 
         int index = 1;
-        String fileStart=null;
-        String fileEnd=null;
+        String filePostStartDate=null;
         try {
             String initUrl = Files.readString(config.urlInputPath).trim();
 
-            Files.createDirectories(config.excelOutputDir);///k
+            if(initUrl.isEmpty()){
+                return;
+            }
+
+            Files.createDirectories(config.excelOutputDir);
             long jobId = jobIdGenerator.getAndIncrement();
 
-            processPostUrlExcel(initUrl, config.excelPostSheetName, config.excelOutputDir, config.excelPostFileName, index, fileStart, fileEnd, jobId);
+            LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()),"Post URL execution Index : {} and Job-Id : {}", index, jobId);
 
-//            System.out.printf("Index : "+index);
-            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
-                    Thread.currentThread().getStackTrace()),"Index {}", index);
+            processPostUrlForExcel(initUrl, config.excelPostSheetName, config.excelOutputDir, config.excelPostFileName, index, filePostStartDate, jobId);
+
+
 
 
 
@@ -144,65 +140,59 @@ public class ProcessAExcelProducer
 //                jobPersistenceService.saveFailedJob(failedJob);
 //            }
 
-        } catch (Exception e) {
-//            e.printStackTrace();
+        } catch (IOException e) {
             LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
+                    Thread.currentThread().threadId(),
                     Thread.currentThread().getStackTrace()), e);
         } finally {
-            state.setProcessAFinished(true);
-            System.out.println("Process A finished.");
+            state.setProcessExcelProducerFinished(true);
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()),"Excel producer process finished");
         }
     }
 
-    private void processPostUrlExcel(String initUrl, String sheetName, Path outputDirPath, String fileName, int index, String fileStart, String fileEnd, long jobId)
+    private void processPostUrlForExcel(String initUrl, String excelSheetName, Path excelOutputDirPath, String excelFileName, int recursiveIndex, String filePostStartDate, long jobId)
     {
         try {
-            List<PostRecord> allPosts;
-            URLExecute urlExecute;
-
             Optional<URLExecute> records;
             do{
                 records = urlExecutionService.executeUrl(initUrl);
-            }while(!records.isPresent());
+            }while(records.isEmpty());
 
-            urlExecute = records.get();
-            allPosts = urlExecute.getPostRecordList();
+            URLExecute urlExecute = records.get();
+            List<PostRecord> allPosts = urlExecute.getPostRecordList();
 
-            if(fileStart == null){
-                fileStart = OffsetDateTime
+            if(filePostStartDate == null){
+                filePostStartDate = OffsetDateTime
                         .parse(allPosts.getFirst().getPublishedAt())
                         .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             }
 
-            fileEnd =OffsetDateTime
+            String filePostEndDate =OffsetDateTime
                     .parse(allPosts.getLast().getPublishedAt())
                     .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
 
-            Path outputFilePath = outputDirPath.resolve(fileName);
-
-            excelService.createExcelFromRecords(allPosts,  outputFilePath, sheetName);
-
-//            System.out.println("Excel file created successfully: " + outputDirPath+fileName);
-//            System.out.println("processPostUrlExcel execute File Start : "+fileStart+" Index : "+index);
+            Path outputFilePath = excelOutputDirPath.resolve(excelFileName);
+            excelService.createExcelFromRecords(allPosts,  outputFilePath, excelSheetName);
 
             LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
+                    Thread.currentThread().threadId(),
                     Thread.currentThread().getStackTrace()),"Excel file created successfully: {}", outputFilePath.toString());
-
             LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
-                    Thread.currentThread().getStackTrace()),"processPostUrlExcel execute File Start :  {}", fileStart+" Index : "+index);
-            if(index<=30) {
-                if(index==30){
-                    File oldFile = outputDirPath.resolve(fileName).toFile();
-                    String newFileName = fileName.replace("temp",fileStart+"_"+fileEnd+"_J"+jobId);
-                    File newFile = outputDirPath.resolve(newFileName).toFile();
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()),"processPostUrlExcel execute File Start :  {}", filePostStartDate+" Index : "+recursiveIndex);
+
+            if(recursiveIndex<=30) {
+                if(recursiveIndex==30){
+                    File oldFile = excelOutputDirPath.resolve(excelFileName).toFile();
+                    String newFileName = excelFileName.replace("temp",filePostStartDate+"_"+filePostEndDate+"_J"+jobId);
+                    File newFile = excelOutputDirPath.resolve(newFileName).toFile();
 
 
                     LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                            Thread.currentThread().getId(),
-                            Thread.currentThread().getStackTrace()),"Excel file created finalizing for Index {}", index);
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),"Excel file created finalizing for Index {}", recursiveIndex);
 
                     // Perform the rename operation
 //                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
@@ -211,7 +201,7 @@ public class ProcessAExcelProducer
 //                        System.out.println("Renamed successfully");
 
                         LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().getId(),
+                                Thread.currentThread().threadId(),
                                 Thread.currentThread().getStackTrace()),"Renamed successfully Excel file name: {}", newFile.getAbsolutePath());
 //                        if (oldFile.delete()) {
 //                            System.out.println("Deleted successfully.");
@@ -221,16 +211,16 @@ public class ProcessAExcelProducer
                     } else {
 //                        System.out.println("Rename failed");
                         LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().getId(),
+                                Thread.currentThread().threadId(),
                                 Thread.currentThread().getStackTrace()), "Rename failed for File Name : {}", newFileName);
                     }
-                    index=1;
-                    fileStart=null;
-                    fileEnd=null;
+                    recursiveIndex=1;
+                    filePostStartDate=null;
+                    filePostEndDate=null;
 
                     System.out.println("Start");
 
-                    ExcelJob job = new ExcelJob(jobId, outputDirPath.resolve(newFileName));
+                    ExcelJob job = new ExcelJob(jobId, excelOutputDirPath.resolve(newFileName));
                     job.setStatus(JobStatus.EXCEL_CREATED);
 
                     jobPersistenceService.saveJobStatus(job);
@@ -250,15 +240,13 @@ public class ProcessAExcelProducer
                     System.out.println("After 500 ms");
 
                 }else {
-                    index++;
+                    recursiveIndex++;
                 }
-                processPostUrlExcel(urlExecute.getNextUrl(), sheetName, outputDirPath, fileName, index, fileStart, fileEnd, jobId);
+                processPostUrlForExcel(urlExecute.getNextUrl(), excelSheetName, excelOutputDirPath, excelFileName, recursiveIndex, filePostStartDate, jobId);
             }
-        } catch (Exception e) {
-//            System.err.println("Fatal error: " + e.getMessage());
-//            e.printStackTrace();
+        } catch (InterruptedException | IOException e) {
             LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
+                    Thread.currentThread().threadId(),
                     Thread.currentThread().getStackTrace()), e);
         }
     }

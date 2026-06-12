@@ -49,7 +49,7 @@ public class PipelineConfig
     public int retryQueueCapacity = 1000;
     public int failedQueueCapacity = 5000;
 
-    public String excelPostSheetName = "posts";
+    public String excelPostSheetName = "Posts";
     public String excelPostFileName = "patreon_posts_output_temp.xlsx";
 
     public String docxPostFileNamePattern = "patreon_posts_output(.*)\\.xlsx";

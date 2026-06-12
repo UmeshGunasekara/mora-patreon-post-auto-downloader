@@ -2,13 +2,46 @@
 
 # mora-patreon-post-auto-downloader
 
-This project created for Patreon Post Download for Jayantha Ukwatha Chanel
+## project information
+
+This project is built to automate Patreon post archiving for a target creator/channel by converting API data into structured deliverables (Excel batches, downloaded images, and DOCX reports). It removes repetitive manual steps and provides traceable logs for success and failure handling.
+
+### Why we created this project
+- Automate large-scale Patreon post extraction and reporting.
+- Preserve post metadata and media in exportable, review-friendly formats.
+- Provide resilient processing with retry and failure tracking for unstable network/download scenarios.
+
+### End-to-end flow
+1. **Process A - Fetch and batch Excel generation**
+   - Reads seed URL from local input file.
+   - Calls Patreon API page by page and extracts post metadata.
+   - Appends records into a temp Excel, then finalizes and queues a job after each batch window.
+2. **Process B - Image download workers**
+   - Reads queued Excel jobs.
+   - Parses image URLs from Excel and downloads media concurrently.
+   - Sends successful jobs to DOCX queue, failed ones to retry/failure path.
+3. **Retry Process - Controlled recovery**
+   - Retries failed image downloads up to configured `maxRetry`.
+4. **Process C - DOCX report generation**
+   - Builds DOCX documents from Excel content and image references.
+   - Persists success logs and pushes hard failures to failed queue.
+5. **Failed Job Monitor - Final failure persistence**
+   - Captures failed jobs and writes detailed failure logs for investigation.
+
+### How to use
+1. Update runtime paths in `app/src/main/java/com/slmora/patreonpostautodownloader/config/PipelineConfig.java` (input URL file + output folders).
+2. Verify logging output path in `app/src/main/resources/log4j2.xml`.
+3. Ensure Patreon request headers/cookie in `app/src/main/java/com/slmora/patreonpostautodownloader/service/UrlExecutionService.java` are valid for your environment.
+4. Place the initial Patreon API URL into the configured input URL text file.
+5. Run tests/build from project root to validate the setup.
+6. Start the pipeline by running `com.slmora.patreonpostautodownloader.controller.PipelineApplication` from the IDE.
+
+> Note: current Gradle `run` executes `com.slmora.patreonpostautodownloader.app.App` (Hello World), not the pipeline entrypoint.
 
 Author : _SLMORA_
 
 DateTime : _06/11/2026 12:00 AM_
 
-Tutorial: 
 
 Project: _slmora_projects_
 

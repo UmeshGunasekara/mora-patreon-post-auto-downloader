@@ -49,7 +49,7 @@ import java.util.concurrent.TimeUnit;
  * <br>1.0          6/6/2026      SLMORA                Initial Code
  * </pre></blockquote>
  */
-public class ProcessBImageDownloadWorker
+public class ProcessImageDownloadWorker
 {
     private final PipelineConfig config;
     private final PipelineQueues queues;
@@ -60,7 +60,7 @@ public class ProcessBImageDownloadWorker
 
     private final ExecutorService processBPool;
 
-    public ProcessBImageDownloadWorker(
+    public ProcessImageDownloadWorker(
             PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
@@ -90,7 +90,7 @@ public class ProcessBImageDownloadWorker
             Thread.currentThread().interrupt();
         }
 
-        state.setProcessBFinished(true);
+        state.setProcessImageDownloadWorkerFinished(true);
         System.out.println("Process B finished.");
     }
 
@@ -100,7 +100,7 @@ public class ProcessBImageDownloadWorker
                 ExcelJob job = queues.excelReadyQueue().poll(2, TimeUnit.SECONDS);
 
                 if (job == null) {
-                    if (state.isProcessAFinished() && queues.excelReadyQueue().isEmpty()) {
+                    if (state.isProcessExcelProducerFinished() && queues.excelReadyQueue().isEmpty()) {
                         break;
                     }
                     continue;
