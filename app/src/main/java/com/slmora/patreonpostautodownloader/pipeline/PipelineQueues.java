@@ -49,11 +49,11 @@ public class PipelineQueues
     private final BlockingQueue<ExcelJob> retryQueue;
     private final BlockingQueue<ExcelJob> failedQueue;
 
-    public PipelineQueues(PipelineConfig config) {
-        this.excelReadyQueue = new ArrayBlockingQueue<>(config.excelQueueCapacity);
-        this.docxReadyQueue = new ArrayBlockingQueue<>(config.docxQueueCapacity);
-        this.retryQueue = new ArrayBlockingQueue<>(config.retryQueueCapacity);
-        this.failedQueue = new ArrayBlockingQueue<>(config.failedQueueCapacity);
+    public PipelineQueues() {
+        this.excelReadyQueue = new ArrayBlockingQueue<>(PipelineConfig.getExcelQueueCapacity());
+        this.docxReadyQueue = new ArrayBlockingQueue<>(PipelineConfig.getDocxQueueCapacity());
+        this.retryQueue = new ArrayBlockingQueue<>(PipelineConfig.getRetryQueueCapacity());
+        this.failedQueue = new ArrayBlockingQueue<>(PipelineConfig.getFailedQueueCapacity());
     }
 
     public BlockingQueue<ExcelJob> excelReadyQueue() {

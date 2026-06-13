@@ -74,29 +74,20 @@ public class PatreonPostDownloadPipelineController
     public void execute() throws IOException
     {
 
-        PipelineConfig config = new PipelineConfig();
-
-        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                Thread.currentThread().threadId(),
-                Thread.currentThread().getStackTrace()),"Load Configuration \n {}", config);
+        LOGGER.debug(threadInfo(),"Load Configuration \n {}", PipelineConfig.getToString());
 
         // Ensure every downstream process can write its artifacts before the pipeline starts.
-        Files.createDirectories(config.excelOutputDir);
-        Files.createDirectories(config.imageOutputDir);
-        Files.createDirectories(config.docxOutputDir);
-        Files.createDirectories(config.failedOutputDir);
+        Files.createDirectories(PipelineConfig.getExcelOutputDirPath());
+        Files.createDirectories(PipelineConfig.getImageOutputDirPath());
+        Files.createDirectories(PipelineConfig.getDocxOutputDirPath());
+        Files.createDirectories(PipelineConfig.getFailedOutputDirPath());
 
-        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                Thread.currentThread().threadId(),
-                Thread.currentThread().getStackTrace()),"Created output directories if not exist");
+        LOGGER.debug(threadInfo(),"Created output directories if not exist");
 
-        PipelineQueues queues = new PipelineQueues(config);
+        PipelineQueues queues = new PipelineQueues();
         PipelineState state = new PipelineState();
 
-        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                Thread.currentThread().threadId(),
-                Thread.currentThread().getStackTrace()),"Configuration, Queues and State initialized");
-
+        LOGGER.debug(threadInfo(),"Configuration, Queues and State initialized");
 
         // Services are constructed here to keep process classes focused on stage-specific work.
         UrlExecutionService urlExecutionService = new UrlExecutionService();
@@ -104,8 +95,8 @@ public class PatreonPostDownloadPipelineController
         ImageDownloadService imageDownloadService = new ImageDownloadService();
         DocxService docxService = new DocxService();
         CleanupService cleanupService = new CleanupService();
-        JobPersistenceService jobPersistenceService = new JobPersistenceService(config);
-        RetryService retryService = new RetryService(config, queues);
+        JobPersistenceService jobPersistenceService = new JobPersistenceService();
+        RetryService retryService = new RetryService(queues);
 
         LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                 Thread.currentThread().threadId(),
@@ -113,7 +104,6 @@ public class PatreonPostDownloadPipelineController
 
         ProcessExcelProducer excelProducer =
                 new ProcessExcelProducer(
-                        config,
                         queues,
                         state,
                         urlExecutionService,
@@ -123,7 +113,6 @@ public class PatreonPostDownloadPipelineController
 
         ProcessImageDownloadWorker imageDownloadWorker =
                 new ProcessImageDownloadWorker(
-                        config,
                         queues,
                         state,
                         excelService,
@@ -133,7 +122,6 @@ public class PatreonPostDownloadPipelineController
 
         ProcessRetry retryProcess =
                 new ProcessRetry(
-                        config,
                         queues,
                         state,
                         imageDownloadService,
@@ -142,7 +130,6 @@ public class PatreonPostDownloadPipelineController
 
         ProcessDocxProducer docxProducer =
                 new ProcessDocxProducer(
-                        config,
                         queues,
                         state,
                         docxService,
@@ -167,5 +154,10 @@ public class PatreonPostDownloadPipelineController
                 );
 
         pipeline.start();
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

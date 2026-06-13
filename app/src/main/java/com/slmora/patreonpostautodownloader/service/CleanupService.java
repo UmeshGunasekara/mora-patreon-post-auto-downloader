@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 
 import java.io.IOException;
@@ -63,5 +64,10 @@ public class CleanupService
         if (job.getExcelFile() != null) {
             Files.deleteIfExists(job.getExcelFile());
         }
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

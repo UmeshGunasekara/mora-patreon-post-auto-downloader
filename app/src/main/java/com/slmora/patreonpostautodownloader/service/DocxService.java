@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.model.DateParts;
 import com.slmora.patreonpostautodownloader.model.DownloadStatus;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
@@ -89,7 +90,6 @@ public class DocxService
     private static final ObjectFactory WML_OBJECT_FACTORY = Context.getWmlObjectFactory();
 
     public void createDocx(ExcelJob job, Path outputDir, String docxFileNamePattern, String docxFileName) throws Exception {
-        Files.createDirectories(outputDir);
 
         Path docxFile = outputDir.resolve(getFinalDocxFileName(job.getExcelFile().getFileName().toString(), docxFileNamePattern, docxFileName));
 
@@ -455,5 +455,10 @@ public class DocxService
                 appendTextNodes(child, sb);
             }
         }
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

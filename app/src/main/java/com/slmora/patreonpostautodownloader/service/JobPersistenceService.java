@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.ImageRecord;
@@ -58,12 +59,10 @@ public class JobPersistenceService
     private static final DateTimeFormatter TS_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public JobPersistenceService(PipelineConfig config) throws IOException
+    public JobPersistenceService() throws IOException
     {
-        Files.createDirectories(config.failedOutputDir);
-
-        this.jobLogFile = config.failedOutputDir.resolve("job-status.log");
-        this.failedLogFile = config.failedOutputDir.resolve("failed-jobs.log");
+        this.jobLogFile = PipelineConfig.getFailedOutputDirPath().resolve("job-status.log");
+        this.failedLogFile = PipelineConfig.getFailedOutputDirPath().resolve("failed-jobs.log");
 
         createIfNotExists(jobLogFile);
         createIfNotExists(failedLogFile);
@@ -191,5 +190,10 @@ public class JobPersistenceService
 
     private String timestamp() {
         return LocalDateTime.now().format(TS_FORMAT);
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

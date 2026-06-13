@@ -7,12 +7,12 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLogger;
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.model.DownloadStatus;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.ImageRecord;
-import org.apache.poi.sl.draw.geom.GuideIf;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -60,6 +61,8 @@ import java.util.concurrent.Semaphore;
  */
 public class ImageDownloadService
 {
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(ImageDownloadService.class);
+
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(20);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private static final int MAX_CONCURRENCY = 16; // virtual threads are cheap; still avoid hammering servers
@@ -73,11 +76,8 @@ public class ImageDownloadService
             .followRedirects(HttpClient.Redirect.ALWAYS)
             .build();
 
-
-
-    public void downloadImages(ExcelJob job, Path imageOutputDir) throws Exception {
-        Files.createDirectories(imageOutputDir);
-
+    public void downloadImages(ExcelJob job, Path imageOutputDir) throws ExecutionException, InterruptedException
+    {
         List<Future<Result>> futures = new ArrayList<>();
 
         // Concurrency control (avoid too many parallel downloads)
@@ -95,6 +95,7 @@ public class ImageDownloadService
                     }
 
                 } catch (Exception e) {
+                    LOGGER.error(threadInfo(), e);
                     return new Result(record, false, null, e.getMessage());
                 }finally {
                     semaphore.release();
@@ -102,27 +103,22 @@ public class ImageDownloadService
             }));
         }
 
-//        for (Future<?> future : futures) {
-//            future.get();
-//        }
-
         int ok = 0, fail = 0;
-        for (Future<Result> f : futures) {
-            Result r = f.get();
-            if (r.success()) {
+        for (Future<Result> future : futures) {
+            Result result = future.get();
+            if (result.success()) {
                 ok++;
-                System.out.println("[OK]   " + r.item().getImageName() + " -> " + r.path());
+                LOGGER.info(threadInfo(),"[OK]   " + result.imageRecord().getImageName() + " -> " + result.path());
             } else {
                 fail++;
-                System.out.println("[FAIL] " + r.item().getImageName() + " (" + r.item().getImageUrl() + ") : " + r.error());
+                LOGGER.error(threadInfo(),"[FAIL] " + result.imageRecord().getImageName() + " (" + result.imageRecord().getImageUrl() + ") : " + result.error());
             }
         }
-
-        System.out.println("\nDone. Success=" + ok + " Fail=" + fail);
+        LOGGER.info(threadInfo(),"Done. Success=" + ok + " Fail=" + fail);
     }
 
-    public void retryFailedImages(ExcelJob job, Path imageOutputDir) throws Exception {
-        Files.createDirectories(imageOutputDir);
+    public void retryFailedImages(ExcelJob job, Path imageOutputDir) throws ExecutionException, InterruptedException
+    {
 
         List<Future<Result>> futures = new ArrayList<>();
 
@@ -142,32 +138,27 @@ public class ImageDownloadService
                         }
 
                     } catch (Exception e) {
+                        LOGGER.error(threadInfo(), e);
                         return new Result(record, false, null, e.getMessage());
                     }finally {
                         semaphore.release();
                     }
-//                        downloadSingleImage(job, record, imageOutputDir)
                 }));
             }
         }
 
-//        for (Future<?> future : futures) {
-//            future.get();
-//        }
-
         int ok = 0, fail = 0;
-        for (Future<Result> f : futures) {
-            Result r = f.get();
-            if (r.success()) {
+        for (Future<Result> future : futures) {
+            Result result = future.get();
+            if (result.success()) {
                 ok++;
-                System.out.println("[OK]   " + r.item().getImageName() + " -> " + r.path());
+                LOGGER.info(threadInfo(),"[OK]   " + result.imageRecord().getImageName() + " -> " + result.path());
             } else {
                 fail++;
-                System.out.println("[FAIL] " + r.item().getImageName() + " (" + r.item().getImageUrl() + ") : " + r.error());
+                LOGGER.error(threadInfo(),"[FAIL] " + result.imageRecord().getImageName() + " (" + result.imageRecord().getImageUrl() + ") : " + result.error());
             }
         }
-
-        System.out.println("\nDone. Success=" + ok + " Fail=" + fail);
+        LOGGER.info(threadInfo(),"Done. Success=" + ok + " Fail=" + fail);
     }
 
     private Optional<Path> downloadSingleImage(
@@ -176,15 +167,17 @@ public class ImageDownloadService
             Path imageOutputDir
     ) {
         try {
-
             String url = record.getImageUrl();
             String imageName = record.getImageName();
             imageName = imageName+"_J"+job.getJobId();
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
+            URI uri = URI.create(url.trim());
+
+            HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(REQUEST_TIMEOUT)
-                    .header("User-Agent", "Mozilla/5.0") // helps with some CDNs
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+                    .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                    .header("Accept-Language", "en-US,en;q=0.9")
                     .GET()
                     .build();
 
@@ -199,7 +192,11 @@ public class ImageDownloadService
 //                throw new IOException("HTTP status: " + response.statusCode());
 //            }
 
-            if (response.statusCode() != 200) {
+//            if (response.statusCode() != 200) {
+//                throw new RuntimeException("HTTP " + response.statusCode());
+//            }
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new RuntimeException("HTTP " + response.statusCode());
             }
 
@@ -211,29 +208,25 @@ public class ImageDownloadService
 
             String ext = guessExtension(url, contentType);
             String safeBase = sanitizeFileName(imageName);
-            Path file = uniquePath(imageOutputDir.resolve(safeBase + ext));
+            Path lastImageFile = uniquePath(imageOutputDir.resolve(safeBase + ext));
 
             try (InputStream body = response.body()) {
-                Files.copy(body, file, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(body, lastImageFile, StandardCopyOption.REPLACE_EXISTING);
+                LOGGER.info(threadInfo(),"Image has  been downloaded in {}", lastImageFile.toAbsolutePath());
             }
 
-//            Path imagePath = imageOutputDir.resolve(
-//                    "job_" + job.getJobId()
-//                            + "_row_" + record.getRowNumber()
-//                            + ".jpg"
-//            );
-//
 //            Files.write(imagePath, response.body());
 
-            record.setDownloadedImagePath(file);
+            record.setDownloadedImagePath(lastImageFile);
             record.setDownloadStatus(DownloadStatus.SUCCESS);
             record.setErrorMessage(null);
 
-            return Optional.of(file);
+            return Optional.of(lastImageFile);
 
         } catch (Exception e) {
             record.setDownloadStatus(DownloadStatus.FAILED);
             record.setErrorMessage(e.getMessage());
+            LOGGER.error(threadInfo(),e);
         }
         return Optional.empty();
     }
@@ -287,5 +280,10 @@ public class ImageDownloadService
     }
 
     private record Result(
-            ImageRecord item, boolean success, String path, String error) {}
+            ImageRecord imageRecord, boolean success, String path, String error) {}
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
+    }
 }

@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.pipeline;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.process.FailedJobMonitor;
 import com.slmora.patreonpostautodownloader.process.ProcessExcelProducer;
 import com.slmora.patreonpostautodownloader.process.ProcessImageDownloadWorker;
@@ -76,5 +77,10 @@ public class ExcelPipeline
         executor.submit(failedJobMonitor::start);
 
         executor.shutdown();
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

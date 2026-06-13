@@ -9,6 +9,7 @@ package com.slmora.patreonpostautodownloader.service;
 
 import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
+import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.PostRecord;
 import com.slmora.patreonpostautodownloader.model.URLExecute;
 import tools.jackson.databind.JsonNode;
@@ -58,74 +59,51 @@ public class UrlExecutionService
 {
     private final static MoraLogger LOGGER = MoraLogger.getLogger(UrlExecutionService.class);
 
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
+
     public Optional<URLExecute> executeUrl(String url)
     {
-//        List<PostRecord> allPosts = new ArrayList<>();
         URLExecute urlExecute;
 
-
         if (url == null || url.isBlank()) {
-//            System.out.println("Input URL file is empty.");
-            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
-                    Thread.currentThread().getStackTrace()), "Input URL file is empty.");
+            LOGGER.error(threadInfo(), "Input URL file is empty.");
             return Optional.empty();
         }
 
-//        System.out.println("Processing URL: " + url);
-        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                Thread.currentThread().getId(),
-                Thread.currentThread().getStackTrace()),"Processing URL: {}", url);
+        LOGGER.info(threadInfo(),"Processing URL: {}", url);
 
         try {
+            String jsonResponse = fetchJsonResponseForUrl(url);
+            LOGGER.debug(threadInfo(),"Processing URL jsonResponse: {}", jsonResponse);
 
-            String jsonResponse = fetchJsonResponse(url);
-            urlExecute = extractPosts(jsonResponse);
-
-//            List<PostRecord> postRecords = urlExecute.getPostRecordList();
-
-//            allPosts.addAll(postRecords);
-//            System.out.println("Fetched posts: " + urlExecute.getPostRecordList().size());
-            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
-                    Thread.currentThread().getStackTrace()),"Fetched posts: {}", urlExecute.getPostRecordList().size());
-
-            // Replace this with your real URL execution logic.
-//            List<PostRecord> records = new ArrayList<>();
+            urlExecute = extractPostsFromJson(jsonResponse);
+            LOGGER.info(threadInfo(),"Fetched posts: {}", urlExecute.getPostRecordList().size());
 
         } catch (IOException | InterruptedException e) {
-//            System.err.println("Error processing URL: " + url);
-//            e.printStackTrace();
-            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
-                    Thread.currentThread().getStackTrace()), "Error processing URL: {}", url);
-            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().getId(),
-                    Thread.currentThread().getStackTrace()), e);
+            LOGGER.error(threadInfo(), "Error processing URL: {}", url);
+            LOGGER.error(threadInfo(), e);
             return Optional.empty();
         }
         return Optional.of(urlExecute);
     }
 
-    private String fetchJsonResponse(String apiUrl) throws IOException, InterruptedException {
+    private String fetchJsonResponseForUrl(String apiUrl) throws IOException, InterruptedException {
         HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
+                .connectTimeout(CONNECT_TIMEOUT)
                 .build();
 
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(apiUrl))
-                .timeout(Duration.ofSeconds(60))
+                .timeout(REQUEST_TIMEOUT)
                 .GET()
                 .header("Accept", "application/json, text/plain, */*")
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
                 .header("Referer", "https://www.patreon.com/")
                 .header("Origin", "https://www.patreon.com")
-//                .header("Cookie", "patreon_device_id=08f32255-011d-4544-9d8c-fb8ce831a362; patreon_location_country_code=SG; patreon_locale_code=en-US; g_state={\"i_l\":0,\"i_ll\":1771459152508,\"i_b\":\"/2gBIfOQdE6N8fC00iDuwk+zwdqwiOY792zIJYIE1WE\",\"i_e\":{\"enable_itp_optimization\":0}}; __ssid=7d5aeef0-15c2-4085-a2cf-876a04a6d219; session_id=JS1Wb9P7WXGroo-3eFs95P1OKUJ3TnDrOkw8v2XYokA; patreon_currency_pref=USD; _ga=GA1.1.948299339.1771685127; _ga_JF55G82FNT=GS2.1.s1771685126$o1$g1$t1771685273$j60$l0$h0; stream_user_token={%22id%22:%2299404896%22%2C%22type%22:%22stream-user-token%22%2C%22token%22:%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzX2F0IjoxNzczODc3MDI1LCJ1c2VyX2lkIjoiOTk0MDQ4OTYiLCJpYXQiOjE3NzI2Njc0MjV9.nNtQfKKGegZdbmsLn24nCO3j9cEQW8SAsv22ZJemTx8%22%2C%22expiresAt%22:%222026-03-18T23:37:05.128+00:00%22}; muxData=mux_viewer_id=2aef67d4-7d06-4b34-bce4-6736413da772&msn=0.29754360385419387&sid=d11b0227-0296-4535-a439-5c9832fcb5a4&sst=1772755603863.1&sex=1772757103865.2; _cfuvid=8S3e08Tah_THahJ0C_qwq3JPv..f.1r0X93Xj18jego-1773326038322-0.0.1.1-604800000; analytics_session_id=ba8664b0-c642-49dd-a43b-4a2588ba4575; __cf_bm=rpPRgP2trXDiP1EzlhXiQpFrzTfvOtZgM8DnpHOLTZ4-1773548345-1.0.1.1-g8poSCidEw2LgWfkNmC4e_ouqIjkhKOolcTduzd4x8pvGDdtUxIfKW9n.6uu_1153sSZFaPe_FU2dmISfMnP3FszNEFqRtEqJTNcF.tOINFueheT_CrH3HC_fooVUG8G");
-//                .header("Cookie", "patreon_device_id=08f32255-011d-4544-9d8c-fb8ce831a362; patreon_location_country_code=SG; patreon_locale_code=en-US; g_state={\"i_l\":0,\"i_ll\":1771459152508,\"i_b\":\"/2gBIfOQdE6N8fC00iDuwk+zwdqwiOY792zIJYIE1WE\",\"i_e\":{\"enable_itp_optimization\":0}}; __ssid=7d5aeef0-15c2-4085-a2cf-876a04a6d219; session_id=JS1Wb9P7WXGroo-3eFs95P1OKUJ3TnDrOkw8v2XYokA; patreon_currency_pref=USD; _ga=GA1.1.948299339.1771685127; _ga_JF55G82FNT=GS2.1.s1771685126$o1$g1$t1771685273$j60$l0$h0; stream_user_token={%22id%22:%2299404896%22%2C%22type%22:%22stream-user-token%22%2C%22token%22:%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHBpcmVzX2F0IjoxNzczODc3MDI1LCJ1c2VyX2lkIjoiOTk0MDQ4OTYiLCJpYXQiOjE3NzI2Njc0MjV9.nNtQfKKGegZdbmsLn24nCO3j9cEQW8SAsv22ZJemTx8%22%2C%22expiresAt%22:%222026-03-18T23:37:05.128+00:00%22}; muxData=mux_viewer_id=2aef67d4-7d06-4b34-bce4-6736413da772&msn=0.29754360385419387&sid=d11b0227-0296-4535-a439-5c9832fcb5a4&sst=1772755603863.1&sex=1772757103865.2; _cfuvid=8S3e08Tah_THahJ0C_qwq3JPv..f.1r0X93Xj18jego-1773326038322-0.0.1.1-604800000; analytics_session_id=e74f4ee1-afcf-4ba4-967d-b1a5fc17961c; __cf_bm=vLVokYEcwBseWR0ddqTyvji8LXQWN6uz4dWlCUbym_Y-1773595883-1.0.1.1-SdnkAJ1KcBBmWJgi5c57pNT.l4IRbdyjbyoRpMFoPyZ0dIf1gyYOVcTOPZl7rKoI.HKaUT357NjaNoNgtrlbAStDM6qG2POkEkK0SQuUkcXwFKmBeKnasWEOvbfCxJ5Z");
-                .header("Cookie", "patreon_device_id=08f32255-011d-4544-9d8c-fb8ce831a362; patreon_location_country_code=SG; patreon_locale_code=en-US; g_state={\"i_l\":0,\"i_ll\":1771459152508,\"i_b\":\"/2gBIfOQdE6N8fC00iDuwk+zwdqwiOY792zIJYIE1WE\",\"i_e\":{\"enable_itp_optimization\":0}}; __ssid=7d5aeef0-15c2-4085-a2cf-876a04a6d219; session_id=JS1Wb9P7WXGroo-3eFs95P1OKUJ3TnDrOkw8v2XYokA; patreon_currency_pref=USD; _ga=GA1.1.948299339.1771685127; _ga_JF55G82FNT=GS***REMOVED***");
+                .header("Cookie", PipelineConfig.getPatreonAccessCookie());
 
         HttpRequest request = requestBuilder.build();
-
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
@@ -136,7 +114,7 @@ public class UrlExecutionService
         return response.body();
     }
 
-    private URLExecute extractPosts(String jsonResponse) throws IOException {
+    private URLExecute extractPostsFromJson(String jsonResponse) throws IOException {
         List<PostRecord> posts = new ArrayList<>();
 
         ObjectMapper objectMapper = new ObjectMapper();
@@ -155,7 +133,6 @@ public class UrlExecutionService
         for (JsonNode postNode : dataArray) {
             PostRecord record = new PostRecord();
 
-//            record.setSourceUrl(sourceUrl);
             String postId = getText(postNode, "id");
             record.setId(postId);
 
@@ -174,7 +151,6 @@ public class UrlExecutionService
 //                largeUrl = getText(imageNode, "large_url");
 //                thumbUrl = getText(imageNode, "thumb_url");
 //            }
-
 
             largeUrl = collectLargeUrls(postId, attributes, includedArray, "default_large");
             record.setLargeUrl(largeUrl);
@@ -244,6 +220,11 @@ public class UrlExecutionService
     private int getInt(JsonNode node, String fieldName) {
         JsonNode valueNode = node.path(fieldName);
         return valueNode.isMissingNode() || valueNode.isNull() ? 0 : valueNode.asInt();
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 
 }

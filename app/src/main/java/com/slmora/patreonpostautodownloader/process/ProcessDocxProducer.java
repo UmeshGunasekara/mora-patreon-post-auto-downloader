@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.process;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.JobStatus;
@@ -50,7 +51,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class ProcessDocxProducer
 {
-    private final PipelineConfig config;
     private final PipelineQueues queues;
     private final PipelineState state;
     private final DocxService docxService;
@@ -60,24 +60,22 @@ public class ProcessDocxProducer
     private final ExecutorService processCPool;
 
     public ProcessDocxProducer(
-            PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
             DocxService docxService,
             CleanupService cleanupService,
             JobPersistenceService jobPersistenceService
     ) {
-        this.config = config;
         this.queues = queues;
         this.state = state;
         this.docxService = docxService;
         this.cleanupService = cleanupService;
         this.jobPersistenceService = jobPersistenceService;
-        this.processCPool = Executors.newFixedThreadPool(config.processCThreads);
+        this.processCPool = Executors.newFixedThreadPool(PipelineConfig.getProcessDocxThreads());
     }
 
     public void start() {
-        for (int i = 0; i < config.processCThreads; i++) {
+        for (int i = 0; i < PipelineConfig.getProcessDocxThreads(); i++) {
             processCPool.submit(this::workerLoop);
         }
 
@@ -119,7 +117,7 @@ public class ProcessDocxProducer
         try {
             job.setStatus(JobStatus.DOCX_CREATION_IN_PROGRESS);
 
-            docxService.createDocx(job, config.docxOutputDir, config.docxPostFileNamePattern, config.docxPostFileName);
+            docxService.createDocx(job, PipelineConfig.getDocxOutputDirPath(), PipelineConfig.getDocxPostFileNamePattern(), PipelineConfig.getDocxPostFileName());
 
             job.setStatus(JobStatus.DOCX_CREATED);
 
@@ -141,5 +139,10 @@ public class ProcessDocxProducer
                 Thread.currentThread().interrupt();
             }
         }
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

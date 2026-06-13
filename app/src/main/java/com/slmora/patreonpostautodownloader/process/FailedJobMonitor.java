@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.process;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineState;
@@ -83,5 +84,10 @@ public class FailedJobMonitor
         }
 
         System.out.println("Failed job monitor finished.");
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

@@ -7,6 +7,8 @@
  */
 package com.slmora.patreonpostautodownloader.process;
 
+import com.slmora.common.logging.MoraLogger;
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.DownloadStatus;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
@@ -17,6 +19,8 @@ import com.slmora.patreonpostautodownloader.service.ExcelService;
 import com.slmora.patreonpostautodownloader.service.ImageDownloadService;
 import com.slmora.patreonpostautodownloader.service.RetryService;
 
+import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -51,52 +55,55 @@ import java.util.concurrent.TimeUnit;
  */
 public class ProcessImageDownloadWorker
 {
-    private final PipelineConfig config;
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(ProcessImageDownloadWorker.class);
+
     private final PipelineQueues queues;
     private final PipelineState state;
     private final ExcelService excelService;
     private final ImageDownloadService imageDownloadService;
     private final RetryService retryService;
 
-    private final ExecutorService processBPool;
+    private final ExecutorService processImageDownloadPool;
 
     public ProcessImageDownloadWorker(
-            PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
             ExcelService excelService,
             ImageDownloadService imageDownloadService,
             RetryService retryService
     ) {
-        this.config = config;
         this.queues = queues;
         this.state = state;
         this.excelService = excelService;
         this.imageDownloadService = imageDownloadService;
         this.retryService = retryService;
-        this.processBPool = Executors.newFixedThreadPool(config.processBThreads);
+        this.processImageDownloadPool = Executors.newFixedThreadPool(PipelineConfig.getProcessImageDownloadThreads());
     }
 
     public void start() {
-        for (int i = 0; i < config.processBThreads; i++) {
-            processBPool.submit(this::workerLoop);
+        for (int i = 0; i < PipelineConfig.getProcessImageDownloadThreads(); i++) {
+            processImageDownloadPool.submit(this::workerLoop);
         }
 
-        processBPool.shutdown();
+        processImageDownloadPool.shutdown();
 
         try {
-            processBPool.awaitTermination(24, TimeUnit.HOURS);
+            processImageDownloadPool.awaitTermination(24, TimeUnit.HOURS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
         state.setProcessImageDownloadWorkerFinished(true);
-        System.out.println("Process B finished.");
+
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                Thread.currentThread().threadId(),
+                Thread.currentThread().getStackTrace()),"ProcessImageDownloadWorker Finished");
     }
 
     private void workerLoop() {
         while (true) {
             try {
+                //Setting 2 second poll timeout for waiting to available Excel Job
                 ExcelJob job = queues.excelReadyQueue().poll(2, TimeUnit.SECONDS);
 
                 if (job == null) {
@@ -105,25 +112,33 @@ public class ProcessImageDownloadWorker
                     }
                     continue;
                 }
-
                 processJob(job);
-
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (InterruptedException e) {
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()), e);
             }
         }
     }
 
     private void processJob(ExcelJob job) {
         try {
-            job.setStatus(JobStatus.IMAGE_DOWNLOAD_IN_PROGRESS);
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()),"Start ProcessImageDownloadWorker for excel Job {}", job);
 
+            job.setStatus(JobStatus.IMAGE_DOWNLOAD_IN_PROGRESS);
             job.getImageRecords().clear();
+
+            LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()),"Clear image collection in excel Job {}",job.getJobId());
+
             job.getImageRecords().addAll(
-                    excelService.readImageRecords(job.getExcelFile(), config.excelPostSheetName)
+                    excelService.readImageRecords(job.getExcelFile(), PipelineConfig.getExcelPostSheetName())
             );
 
-            imageDownloadService.downloadImages(job, config.imageOutputDir);
+            imageDownloadService.downloadImages(job, PipelineConfig.getImageOutputDirPath());
 
             boolean hasSuccess = job.getImageRecords()
                     .stream()
@@ -137,7 +152,15 @@ public class ProcessImageDownloadWorker
             }
 
         } catch (Exception e) {
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()), e);
             retryService.sendToRetryOrFailed(job, e.getMessage());
         }
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

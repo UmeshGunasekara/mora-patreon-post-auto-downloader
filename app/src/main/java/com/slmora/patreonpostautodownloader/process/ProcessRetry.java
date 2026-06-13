@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.process;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.DownloadStatus;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
@@ -48,20 +49,17 @@ import java.util.concurrent.TimeUnit;
  */
 public class ProcessRetry
 {
-    private final PipelineConfig config;
     private final PipelineQueues queues;
     private final PipelineState state;
     private final ImageDownloadService imageDownloadService;
     private final RetryService retryService;
 
     public ProcessRetry(
-            PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
             ImageDownloadService imageDownloadService,
             RetryService retryService
     ) {
-        this.config = config;
         this.queues = queues;
         this.state = state;
         this.imageDownloadService = imageDownloadService;
@@ -95,7 +93,7 @@ public class ProcessRetry
         try {
             job.setStatus(JobStatus.IMAGE_DOWNLOAD_IN_PROGRESS);
 
-            imageDownloadService.retryFailedImages(job, config.imageOutputDir);
+            imageDownloadService.retryFailedImages(job, PipelineConfig.getImageOutputDirPath());
 
             boolean hasSuccess = job.getImageRecords()
                     .stream()
@@ -118,5 +116,10 @@ public class ProcessRetry
         } catch (Exception e) {
             retryService.sendToRetryOrFailed(job, e.getMessage());
         }
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

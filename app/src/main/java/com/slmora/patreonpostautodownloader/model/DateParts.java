@@ -10,21 +10,23 @@ package com.slmora.patreonpostautodownloader.model;
 import lombok.Data;
 
 /**
- * The {@code DateParts} Class created for
- * <h4>Key Features</h4>
- * <ul>
- *      <li>...</li>
- * </ul>
- * <h4>Codes</h4>
- * 1 - {@link }<br>
- * <h4>Methods</h4>
- * <ul>
- *      <li>{@link }</li>
- * </ul>
+ * Holds separated date and time values used by the Patreon post pipeline.
  * <p>
- * <h4>Notes</h4>
+ * This DTO represents a timestamp after it has been split into display or file
+ * naming components. Lombok {@link Data} generates the accessors, mutators,
+ * {@code equals}, {@code hashCode}, and {@code toString} methods.
+ * </p>
+ *
+ * <p>Methods:</p>
  * <ul>
- *     <li>....</li>
+ *     <li>Lombok-generated getters and setters for {@link #date} and {@link #time}.</li>
+ *     <li>Lombok-generated {@code equals}, {@code hashCode}, and {@code toString} methods.</li>
+ * </ul>
+ *
+ * <p>Key responsibilities:</p>
+ * <ul>
+ *     <li>Store the date portion of a parsed timestamp.</li>
+ *     <li>Store the time portion of a parsed timestamp.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -40,6 +42,13 @@ import lombok.Data;
 @Data
 public class DateParts
 {
+    /**
+     * Date component extracted from a timestamp.
+     */
     private String date;
+
+    /**
+     * Time component extracted from a timestamp.
+     */
     private String time;
 }

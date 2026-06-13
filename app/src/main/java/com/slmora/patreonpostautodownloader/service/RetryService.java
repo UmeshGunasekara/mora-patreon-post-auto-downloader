@@ -7,6 +7,7 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.JobStatus;
@@ -42,11 +43,9 @@ import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
  */
 public class RetryService
 {
-    private final PipelineConfig config;
     private final PipelineQueues queues;
 
-    public RetryService(PipelineConfig config, PipelineQueues queues) {
-        this.config = config;
+    public RetryService(PipelineQueues queues) {
         this.queues = queues;
     }
 
@@ -54,7 +53,7 @@ public class RetryService
         try {
             job.setErrorMessage(reason);
 
-            if (job.getRetryCount() < config.maxRetry) {
+            if (job.getRetryCount() < PipelineConfig.getMaxRetry()) {
                 job.incrementRetryCount();
                 job.setStatus(JobStatus.RETRY_PENDING);
                 queues.retryQueue().put(job);
@@ -66,5 +65,10 @@ public class RetryService
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

@@ -69,7 +69,6 @@ public class ProcessExcelProducer
 {
     private final static MoraLogger LOGGER = MoraLogger.getLogger(ProcessExcelProducer.class);
 
-    private final PipelineConfig config;
     private final PipelineQueues queues;
     private final PipelineState state;
     private final UrlExecutionService urlExecutionService;
@@ -90,14 +89,12 @@ public class ProcessExcelProducer
      * @param jobPersistenceService service used to persist job status updates
      */
     public ProcessExcelProducer(
-            PipelineConfig config,
             PipelineQueues queues,
             PipelineState state,
             UrlExecutionService urlExecutionService,
             ExcelService excelService,
             JobPersistenceService jobPersistenceService
     ) {
-        this.config = config;
         this.queues = queues;
         this.state = state;
         this.urlExecutionService = urlExecutionService;
@@ -118,20 +115,19 @@ public class ProcessExcelProducer
         int index = 1;
         String filePostStartDate=null;
         try {
-            String initUrl = Files.readString(config.urlInputPath).trim();
+            String initUrl = Files.readString(PipelineConfig.getUrlInputPath()).trim();
 
             if(initUrl.isEmpty()){
                 return;
             }
 
-            Files.createDirectories(config.excelOutputDir);
             long jobId = jobIdGenerator.getAndIncrement();
 
             LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                     Thread.currentThread().threadId(),
                     Thread.currentThread().getStackTrace()),"Post URL execution Index : {} and Job-Id : {}", index, jobId);
 
-            processPostUrlForExcel(initUrl, config.excelPostSheetName, config.excelOutputDir, config.excelPostFileName, index, filePostStartDate, jobId);
+            processPostUrlForExcel(initUrl, PipelineConfig.getExcelPostSheetName(), PipelineConfig.getExcelOutputDirPath(), PipelineConfig.getExcelPostFileName(), index, filePostStartDate, jobId);
 
         } catch (IOException e) {
             LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
@@ -288,6 +284,9 @@ public class ProcessExcelProducer
                 }else {
                     recursiveIndex++;
                 }
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),"processPostUrlExcel execute for next URL :  {}", urlExecute.getNextUrl());
                 processPostUrlForExcel(urlExecute.getNextUrl(), excelSheetName, excelOutputDirPath, excelFileName, recursiveIndex, filePostStartDate, jobId);
             }
         } catch (InterruptedException | IOException e) {
@@ -295,5 +294,10 @@ public class ProcessExcelProducer
                     Thread.currentThread().threadId(),
                     Thread.currentThread().getStackTrace()), e);
         }
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

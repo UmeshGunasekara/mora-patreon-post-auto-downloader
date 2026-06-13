@@ -12,7 +12,6 @@ import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.model.DateParts;
 import com.slmora.patreonpostautodownloader.model.ImageRecord;
 import com.slmora.patreonpostautodownloader.model.PostRecord;
-import com.slmora.patreonpostautodownloader.process.ProcessExcelProducer;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -30,7 +29,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
@@ -78,7 +76,7 @@ public class ExcelService
     }
 
     public List<ImageRecord> readImageRecords(Path excelFile, String sheetName) throws Exception {
-        return readItemsFromExcel(excelFile, sheetName);
+        return readImageRecordsFromExcel(excelFile, sheetName);
     }
 
     private void writePostsToExcel(List<PostRecord> patreonPosts, Path excelOutputFilePath, String excelSheetName) throws IOException
@@ -221,10 +219,7 @@ public class ExcelService
         cell.setCellStyle(style);
     }
 
-    //===================
-
-
-    private List<ImageRecord> readItemsFromExcel(Path xlsx, String excelSheetName) {
+    private List<ImageRecord> readImageRecordsFromExcel(Path xlsx, String excelSheetName) {
         try (InputStream in = Files.newInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(in)) {
 
@@ -361,5 +356,10 @@ public class ExcelService
 
         // replace spaces with "-"
         return cleaned.trim().replaceAll("\\s+", "-");
+    }
+
+    private static MoraLoggerThreadInfo threadInfo() {
+        Thread t = Thread.currentThread();
+        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }
