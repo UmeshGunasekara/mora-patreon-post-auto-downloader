@@ -46,7 +46,6 @@ import java.util.List;
 public class ExcelJob
 {
     private final long jobId;
-//    private final String sourceUrl;
     private final Path excelFile;
 
     private final List<ImageRecord> imageRecords =
@@ -56,12 +55,6 @@ public class ExcelJob
     private volatile int retryCount;
     private volatile String errorMessage;
 
-//    public ExcelJob(long jobId, String sourceUrl, Path excelFile) {
-//        this.jobId = jobId;
-//        this.sourceUrl = sourceUrl;
-//        this.excelFile = excelFile;
-//    }
-
     public ExcelJob(long jobId, Path excelFile) {
         this.jobId = jobId;
         this.excelFile = excelFile;
@@ -69,5 +62,15 @@ public class ExcelJob
 
     public void incrementRetryCount() {
         this.retryCount++;
+    }
+
+    public String toString() {
+        return "ExcelJob{" +
+                "jobId=" + jobId +
+                ", excelFile=" + excelFile +
+                ", status=" + status +
+                ", retryCount=" + retryCount +
+                ", errorMessage='" + errorMessage + '\'' +
+                '}';
     }
 }

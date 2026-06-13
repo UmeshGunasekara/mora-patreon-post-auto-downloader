@@ -31,21 +31,28 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * The {@code ProcessAExcelProducer} Class created for
- * <h4>Key Features</h4>
- * <ul>
- *      <li>...</li>
- * </ul>
- * <h4>Codes</h4>
- * 1 - {@link }<br>
- * <h4>Methods</h4>
- * <ul>
- *      <li>{@link }</li>
- * </ul>
+ * Produces Excel batches from Patreon post API responses.
  * <p>
- * <h4>Notes</h4>
+ * This process reads the initial Patreon API URL from configuration, retrieves
+ * paginated post data through {@link UrlExecutionService}, appends the records
+ * into a temporary Excel workbook through {@link ExcelService}, finalizes each
+ * batch file after the configured page window, and places the resulting
+ * {@link ExcelJob} on the Excel-ready queue for image processing.
+ * </p>
+ *
+ * <p>Methods:</p>
  * <ul>
- *     <li>....</li>
+ *     <li>{@link #ProcessExcelProducer(PipelineConfig, PipelineQueues, PipelineState, UrlExecutionService, ExcelService, JobPersistenceService)} - creates the producer with its shared pipeline dependencies.</li>
+ *     <li>{@link #start()} - starts URL ingestion and marks the producer as finished when complete.</li>
+ *     <li>{@link #processPostUrlForExcel(String, String, Path, String, int, String, long)} - recursively fetches post pages, writes Excel rows, finalizes batch files, and enqueues jobs.</li>
+ * </ul>
+ *
+ * <p>Key responsibilities:</p>
+ * <ul>
+ *     <li>Read the seed Patreon API URL from {@link PipelineConfig#urlInputPath}.</li>
+ *     <li>Create and maintain temporary Excel files for downloaded post records.</li>
+ *     <li>Finalize each Excel batch with date and job identifiers in the file name.</li>
+ *     <li>Persist Excel job status and publish completed jobs to {@link PipelineQueues#excelReadyQueue()}.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -71,6 +78,17 @@ public class ProcessExcelProducer
 
     private final AtomicLong jobIdGenerator = new AtomicLong(1);
 
+    /**
+     * Creates an Excel producer with the dependencies required for URL retrieval,
+     * workbook creation, status persistence, and queue coordination.
+     *
+     * @param config pipeline configuration containing input and output paths
+     * @param queues shared queues used to publish completed Excel jobs
+     * @param state shared pipeline state used to signal producer completion
+     * @param urlExecutionService service used to execute Patreon API requests
+     * @param excelService service used to write post records into Excel workbooks
+     * @param jobPersistenceService service used to persist job status updates
+     */
     public ProcessExcelProducer(
             PipelineConfig config,
             PipelineQueues queues,
@@ -87,6 +105,14 @@ public class ProcessExcelProducer
         this.jobPersistenceService = jobPersistenceService;
     }
 
+    /**
+     * Starts the Excel producer process.
+     * <p>
+     * The method reads the initial URL, prepares the Excel output directory,
+     * starts recursive post-page processing, and always marks this producer as
+     * finished before returning.
+     * </p>
+     */
     public void start() {
 
         int index = 1;
@@ -107,39 +133,6 @@ public class ProcessExcelProducer
 
             processPostUrlForExcel(initUrl, config.excelPostSheetName, config.excelOutputDir, config.excelPostFileName, index, filePostStartDate, jobId);
 
-
-
-
-
-
-//            try {
-//                Path excelFile = config.excelOutputDir.resolve(
-//                        "posts_" + jobId + ".xlsx"
-//                );
-//
-//                List<URLExecute> records =
-//                        urlExecutionService.executeUrl(initUrl);
-//
-//                excelService.createExcelFromRecords(records, excelFile);
-
-//                ExcelJob job = new ExcelJob(jobId, url, excelFile);
-//                job.setStatus(JobStatus.EXCEL_CREATED);
-//
-//                jobPersistenceService.saveJobStatus(job);
-//
-//                queues.excelReadyQueue().put(job);
-//
-//                System.out.println("Process A created Excel job: " + jobId);
-//
-//            } catch (Exception e) {
-//                ExcelJob failedJob = new ExcelJob(jobId, url, null);
-//                failedJob.setStatus(JobStatus.FAILED);
-//                failedJob.setErrorMessage("Process A failed: " + e.getMessage());
-//
-//                queues.failedQueue().put(failedJob);
-//                jobPersistenceService.saveFailedJob(failedJob);
-//            }
-
         } catch (IOException e) {
             LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                     Thread.currentThread().threadId(),
@@ -152,6 +145,22 @@ public class ProcessExcelProducer
         }
     }
 
+    /**
+     * Processes Patreon post pages into Excel batches.
+     * <p>
+     * Each invocation fetches the current page, writes records to the temporary
+     * workbook, finalizes the workbook when the batch window is reached, enqueues
+     * the completed job, and then continues with the next pagination URL.
+     * </p>
+     *
+     * @param initUrl current Patreon API URL to execute
+     * @param excelSheetName Excel sheet name for post records
+     * @param excelOutputDirPath directory where Excel files are written
+     * @param excelFileName temporary Excel file name used during batch creation
+     * @param recursiveIndex current page index inside the active Excel batch
+     * @param filePostStartDate first post date for the active Excel batch
+     * @param jobId job identifier assigned to the active Excel batch
+     */
     private void processPostUrlForExcel(String initUrl, String excelSheetName, Path excelOutputDirPath, String excelFileName, int recursiveIndex, String filePostStartDate, long jobId)
     {
         try {
@@ -173,71 +182,108 @@ public class ProcessExcelProducer
                     .parse(allPosts.getLast().getPublishedAt())
                     .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
 
-            Path outputFilePath = excelOutputDirPath.resolve(excelFileName);
-            excelService.createExcelFromRecords(allPosts,  outputFilePath, excelSheetName);
+            Path excelOutputFilePath = excelOutputDirPath.resolve(excelFileName);
+            excelService.createExcelFromRecords(allPosts,  excelOutputFilePath, excelSheetName);
 
             LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                     Thread.currentThread().threadId(),
-                    Thread.currentThread().getStackTrace()),"Excel file created successfully: {}", outputFilePath.toString());
-            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().threadId(),
-                    Thread.currentThread().getStackTrace()),"processPostUrlExcel execute File Start :  {}", filePostStartDate+" Index : "+recursiveIndex);
+                    Thread.currentThread().getStackTrace()),"processPostUrlExcel execute File Start :  {},  Index : {}", filePostStartDate, recursiveIndex);
 
             if(recursiveIndex<=30) {
                 if(recursiveIndex==30){
-                    File oldFile = excelOutputDirPath.resolve(excelFileName).toFile();
-                    String newFileName = excelFileName.replace("temp",filePostStartDate+"_"+filePostEndDate+"_J"+jobId);
-                    File newFile = excelOutputDirPath.resolve(newFileName).toFile();
-
+                    File tempExcelFile = excelOutputDirPath.resolve(excelFileName).toFile();
+                    String newFileExcelName = excelFileName.replace("temp",filePostStartDate+"_"+filePostEndDate+"_J"+jobId);
+                    File newExcelFile = excelOutputDirPath.resolve(newFileExcelName).toFile();
 
                     LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                             Thread.currentThread().threadId(),
                             Thread.currentThread().getStackTrace()),"Excel file created finalizing for Index {}", recursiveIndex);
 
-                    // Perform the rename operation
-//                    Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+                    // Retry rename because Windows file handles can briefly remain locked after workbook writes.
+                    boolean renamed = false;
+                    for (int attempt = 1; attempt <= 3; attempt++) {
+                        if (tempExcelFile.renameTo(newExcelFile)) {
+                            renamed = true;
+                            LOGGER.info(new MoraLoggerThreadInfo(
+                                            Thread.currentThread().getName(),
+                                            Thread.currentThread().threadId(),
+                                            Thread.currentThread().getStackTrace()),
+                                    "Renamed successfully Excel file name: {} on attempt {}",
+                                    newExcelFile.getAbsolutePath(), attempt);
+                            break;
+                        }
 
-                    if (oldFile.renameTo(newFile)) {
-//                        System.out.println("Renamed successfully");
+                        LOGGER.error(new MoraLoggerThreadInfo(
+                                        Thread.currentThread().getName(),
+                                        Thread.currentThread().threadId(),
+                                        Thread.currentThread().getStackTrace()),
+                                "Rename failed for File Name : {} on attempt {}/3",
+                                newFileExcelName, attempt);
 
-                        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().threadId(),
-                                Thread.currentThread().getStackTrace()),"Renamed successfully Excel file name: {}", newFile.getAbsolutePath());
-//                        if (oldFile.delete()) {
-//                            System.out.println("Deleted successfully.");
-//                        } else {
-//                            System.out.println("Delete failed.");
-//                        }
-                    } else {
-//                        System.out.println("Rename failed");
-                        LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().threadId(),
-                                Thread.currentThread().getStackTrace()), "Rename failed for File Name : {}", newFileName);
+                        if (attempt < 3) {
+                            try {
+                                Thread.sleep(1000);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                LOGGER.error(new MoraLoggerThreadInfo(
+                                                Thread.currentThread().getName(),
+                                                Thread.currentThread().threadId(),
+                                                Thread.currentThread().getStackTrace()),
+                                        "Rename retry interrupted for File Name : {}",
+                                        newFileExcelName);
+                                throw new RuntimeException("Rename retry interrupted for file: " + newFileExcelName, e);
+                            }
+                        }
                     }
+
+                    if (!renamed) {
+                        LOGGER.error(new MoraLoggerThreadInfo(
+                                        Thread.currentThread().getName(),
+                                        Thread.currentThread().threadId(),
+                                        Thread.currentThread().getStackTrace()),
+                                "Rename failed after 3 attempts for File Name : {}",
+                                newFileExcelName);
+                        throw new RuntimeException("Rename failed after 3 attempts for file: " + newFileExcelName);
+                    }
+
                     recursiveIndex=1;
                     filePostStartDate=null;
-                    filePostEndDate=null;
 
-                    System.out.println("Start");
+                    LOGGER.debug(new MoraLoggerThreadInfo(
+                                    Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "Reset recursive index for next iteration with index : {}",recursiveIndex);
 
-                    ExcelJob job = new ExcelJob(jobId, excelOutputDirPath.resolve(newFileName));
+                    ExcelJob job = new ExcelJob(jobId, excelOutputDirPath.resolve(newFileExcelName));
                     job.setStatus(JobStatus.EXCEL_CREATED);
-
                     jobPersistenceService.saveJobStatus(job);
-
                     queues.excelReadyQueue().put(job);
 
-                    System.out.println("Process A created Excel job: " + jobId);
+                    LOGGER.debug(new MoraLoggerThreadInfo(
+                                    Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "Added new ExcelJob in to ready queue : {}",job);
 
                     jobId = jobIdGenerator.getAndIncrement();
+                    LOGGER.debug(new MoraLoggerThreadInfo(
+                                    Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "Increment new Job ID : {}",jobId);
 
                     try {
-                        Thread.sleep(500);
+                        Thread.sleep(1000);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
 
-                    System.out.println("After 500 ms");
+                    LOGGER.info(new MoraLoggerThreadInfo(
+                                    Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "After 1000 ms");
 
                 }else {
                     recursiveIndex++;

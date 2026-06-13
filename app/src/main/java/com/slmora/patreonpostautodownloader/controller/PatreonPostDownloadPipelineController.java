@@ -30,21 +30,26 @@ import java.io.IOException;
 import java.nio.file.Files;
 
 /**
- * The {@code PipelineApplication} Class created for
- * <h4>Key Features</h4>
- * <ul>
- *      <li>...</li>
- * </ul>
- * <h4>Codes</h4>
- * 1 - {@link }<br>
- * <h4>Methods</h4>
- * <ul>
- *      <li>{@link }</li>
- * </ul>
+ * Coordinates startup for the Patreon post download pipeline.
  * <p>
- * <h4>Notes</h4>
+ * This controller is responsible for constructing the pipeline configuration,
+ * preparing required output directories, wiring queue and state objects,
+ * creating the services used by each process stage, and starting the
+ * {@link ExcelPipeline}. It keeps the application entry point lightweight while
+ * preserving the project's manual orchestration style.
+ * </p>
+ *
+ * <p>Methods:</p>
  * <ul>
- *     <li>....</li>
+ *     <li>{@link #execute()} - initializes and starts the Patreon post download pipeline.</li>
+ * </ul>
+ *
+ * <p>Key responsibilities:</p>
+ * <ul>
+ *     <li>Load pipeline configuration and ensure required output directories exist.</li>
+ *     <li>Create shared pipeline queues and execution state.</li>
+ *     <li>Wire producer, worker, retry, DOCX, and failed-job monitor processes.</li>
+ *     <li>Start the configured {@link ExcelPipeline}.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -61,6 +66,11 @@ public class PatreonPostDownloadPipelineController
 {
     private final static MoraLogger LOGGER = MoraLogger.getLogger(PatreonPostDownloadPipelineController.class);
 
+    /**
+     * Initializes all pipeline dependencies and starts the producer-worker workflow.
+     *
+     * @throws IOException if required output directories cannot be created
+     */
     public void execute() throws IOException
     {
 
@@ -70,6 +80,7 @@ public class PatreonPostDownloadPipelineController
                 Thread.currentThread().threadId(),
                 Thread.currentThread().getStackTrace()),"Load Configuration \n {}", config);
 
+        // Ensure every downstream process can write its artifacts before the pipeline starts.
         Files.createDirectories(config.excelOutputDir);
         Files.createDirectories(config.imageOutputDir);
         Files.createDirectories(config.docxOutputDir);
@@ -87,6 +98,7 @@ public class PatreonPostDownloadPipelineController
                 Thread.currentThread().getStackTrace()),"Configuration, Queues and State initialized");
 
 
+        // Services are constructed here to keep process classes focused on stage-specific work.
         UrlExecutionService urlExecutionService = new UrlExecutionService();
         ExcelService excelService = new ExcelService();
         ImageDownloadService imageDownloadService = new ImageDownloadService();

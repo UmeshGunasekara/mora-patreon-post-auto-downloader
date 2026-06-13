@@ -7,9 +7,12 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLogger;
+import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.model.DateParts;
 import com.slmora.patreonpostautodownloader.model.ImageRecord;
 import com.slmora.patreonpostautodownloader.model.PostRecord;
+import com.slmora.patreonpostautodownloader.process.ProcessExcelProducer;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -67,29 +70,24 @@ import java.util.Map;
  */
 public class ExcelService
 {
-    public void createExcelFromRecords(List<PostRecord> posts, Path outputFilePath, String sheetName) throws IOException
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(ExcelService.class);
+
+    public void createExcelFromRecords(List<PostRecord> patreonPosts, Path excelOutputFilePath, String excelSheetName) throws IOException
     {
-
-        Files.createDirectories(outputFilePath.getParent());
-
-        writePostsToExcel(posts, outputFilePath, sheetName);
+        writePostsToExcel(patreonPosts, excelOutputFilePath, excelSheetName);
     }
 
     public List<ImageRecord> readImageRecords(Path excelFile, String sheetName) throws Exception {
         return readItemsFromExcel(excelFile, sheetName);
     }
 
-
-
-    private void writePostsToExcel(List<PostRecord> posts, Path outputFilePath, String sheetName) throws IOException
+    private void writePostsToExcel(List<PostRecord> patreonPosts, Path excelOutputFilePath, String excelSheetName) throws IOException
     {
-
-        Workbook workbook;
+        Workbook workbook = null;
         Sheet sheet;
         int rowIndex;
 
         String[] headers = {
-//                    "source_url",
                 "id",
                 "published_at",
                 "title",
@@ -101,57 +99,80 @@ public class ExcelService
                 "thumb_url"
         };
 
-        File file = outputFilePath.toFile();
+        File excelFile = excelOutputFilePath.toFile();
 
-        if (file.exists()) {
-            FileInputStream fis = new FileInputStream(file);
-            workbook = WorkbookFactory.create(fis);
-            sheet = workbook.getSheet(sheetName);
-            if (sheet == null) {
-                sheet = workbook.createSheet(sheetName);
+        try {
+            if (excelFile.exists()) {
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Excel file exists in {}",
+                        excelOutputFilePath.toString());
+
+                try (FileInputStream fis = new FileInputStream(excelFile)) {
+                    workbook = WorkbookFactory.create(fis);
+                    sheet = workbook.getSheet(excelSheetName);
+                    if (sheet == null) {
+                        sheet = workbook.createSheet(excelSheetName);
+                        initiateHeaderForExcelSheet(workbook, sheet, headers);
+                    }
+                    rowIndex = sheet.getLastRowNum() + 1;
+                }
+
+            } else {
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Excel file not exists in {}",
+                        excelOutputFilePath.toString());
+
+                workbook = new XSSFWorkbook();
+                sheet = workbook.createSheet(excelSheetName);
+                initiateHeaderForExcelSheet(workbook, sheet, headers);
+                rowIndex = 1;
             }
-            rowIndex = sheet.getLastRowNum() + 1;
-            fis.close();
 
-        }else{
-            workbook = new XSSFWorkbook();
-            sheet = workbook.createSheet(sheetName);
+            setColumnWithForSheet(sheet);
+            CellStyle wrapStyle = createWrapStyle(workbook);
 
-            CellStyle headerStyle = createHeaderStyle(workbook);
+            for (PostRecord post : patreonPosts) {
+                Row row = sheet.createRow(rowIndex++);
 
-            Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < headers.length; i++) {
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(headers[i]);
-                cell.setCellStyle(headerStyle);
+                createCell(row, 0, post.getId(), wrapStyle);
+                createCell(row, 1, post.getPublishedAt(), wrapStyle);
+                createCell(row, 2, post.getTitle(), wrapStyle);
+                createCell(row, 3, post.getCleanedTeaserText(), wrapStyle);
+                createCell(row, 4, post.getContentJsonString(), wrapStyle);
+
+                Cell commentCell = row.createCell(5);
+                commentCell.setCellValue(post.getCommentCount());
+                commentCell.setCellStyle(wrapStyle);
+
+                createCell(row, 6, post.getPatreonUrl(), wrapStyle);
+                createCell(row, 7, post.getLargeUrl(), wrapStyle);
+                createCell(row, 8, post.getThumbUrl(), wrapStyle);
             }
 
-            rowIndex = 1;
+            sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(
+                    0, Math.max(1, rowIndex - 1), 0, headers.length - 1));
+
+            try (FileOutputStream fos = new FileOutputStream(excelFile)) {
+                workbook.write(fos);
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Excel file updated in {}",
+                        excelOutputFilePath.toString());
+            }
+        }finally {
+            if(workbook != null){
+                workbook.close();
+            }
         }
+    }
 
-
-        CellStyle wrapStyle = createWrapStyle(workbook);
-
-        for (PostRecord post : posts) {
-            Row row = sheet.createRow(rowIndex++);
-
-//                createCell(row, 0, post.getSourceUrl(), wrapStyle);
-            createCell(row, 0, post.getId(), wrapStyle);
-            createCell(row, 1, post.getPublishedAt(), wrapStyle);
-            createCell(row, 2, post.getTitle(), wrapStyle);
-            createCell(row, 3, post.getCleanedTeaserText(), wrapStyle);
-            createCell(row, 4, post.getContentJsonString(), wrapStyle);
-
-            Cell commentCell = row.createCell(5);
-            commentCell.setCellValue(post.getCommentCount());
-            commentCell.setCellStyle(wrapStyle);
-
-            createCell(row, 6, post.getPatreonUrl(), wrapStyle);
-            createCell(row, 7, post.getLargeUrl(), wrapStyle);
-            createCell(row, 8, post.getThumbUrl(), wrapStyle);
-        }
-
-//            sheet.setColumnWidth(0, 18000); // source_url
+    private static void setColumnWithForSheet(Sheet sheet)
+    {
         sheet.setColumnWidth(0, 5000);  // id
         sheet.setColumnWidth(1, 7000);  // published_at
         sheet.setColumnWidth(2, 8000);  // title
@@ -161,14 +182,17 @@ public class ExcelService
         sheet.setColumnWidth(6, 15000); // patreon_url
         sheet.setColumnWidth(7, 15000); // large_url
         sheet.setColumnWidth(8, 15000); // sheet.setColumnWidth(7, 15000); // large_url
+    }
 
-        sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(
-                0, Math.max(1, rowIndex - 1), 0, headers.length - 1));
+    private void initiateHeaderForExcelSheet(Workbook workbook, Sheet sheet, String[] headers)
+    {
+        CellStyle headerStyle = createHeaderStyle(workbook);
 
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            workbook.write(fos);
-        }finally {
-            workbook.close();
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
         }
     }
 
@@ -200,13 +224,13 @@ public class ExcelService
     //===================
 
 
-    private List<ImageRecord> readItemsFromExcel(Path xlsx, String sheetName) throws Exception {
+    private List<ImageRecord> readItemsFromExcel(Path xlsx, String excelSheetName) {
         try (InputStream in = Files.newInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(in)) {
 
             List<ImageRecord> items = new ArrayList<>();
 
-            Sheet sheet = workbook.getSheetAt(0);
+            Sheet sheet = workbook.getSheet(excelSheetName);
             DataFormatter formatter = new DataFormatter();
             Row headerRow = sheet.getRow(0);
 
@@ -226,8 +250,18 @@ public class ExcelService
                 String imageUrl = getCellValue(row, columnMap, "large_url", formatter);
 
                 DateParts dateParts = splitPublishedAt(publishedAt);
+                String time = dateParts.getTime().replace(":", "-");
 
-                String time = dateParts.getTime().replaceAll(":", "-");
+                LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Excel raw information \n\tid : {} \n\tpublished_at : {} \n\ttitle : {} \n\tlarge_url : {} \n\tdateParts : {} \n\ttime : {}",
+                        id,
+                        publishedAt,
+                        title,
+                        imageUrl,
+                        dateParts.getDate(),
+                        time);
 
                 if (!imageUrl.isBlank()) {
                     List<String> images = new ArrayList<>();
@@ -243,25 +277,30 @@ public class ExcelService
                     }
                     int index = 1;
                     for(String image : images) {
-                        String fileName = dateParts.getDate() + "-T" + time + "-" + id+ "-" +normalizeTitle(title)+"-"+String.format("%02d", index++);
+                        String fileName = "D"+dateParts.getDate() + "-T" + time + "-" + id+ "-" +normalizeTitle(title)+"-"+String.format("%02d", index++);
                         items.add(new ImageRecord(r, image, fileName));
                     }
                 }
             }
 
             return items;
+        } catch (IOException e) {
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()), e);
+            throw new RuntimeException(e);
         }
     }
 
     private Map<String, Integer> buildColumnMap(Row headerRow, DataFormatter formatter) {
-        Map<String, Integer> map = new HashMap<>();
+        Map<String, Integer> columnMap = new HashMap<>();
         for (Cell cell : headerRow) {
             String name = formatter.formatCellValue(cell).trim();
             if (!name.isBlank()) {
-                map.put(name, cell.getColumnIndex());
+                columnMap.put(name, cell.getColumnIndex());
             }
         }
-        return map;
+        return columnMap;
     }
 
     /**
@@ -309,36 +348,6 @@ public class ExcelService
     }
 
     private String normalizeTitle(String text) {
-
-//        if (text == null || text.isBlank()) {
-//            return "";
-//        }
-//
-//        // remove special characters except spaces
-//        String cleaned = text.replaceAll("[^a-zA-Z0-9 ]", "");
-//
-//        String[] words = cleaned.trim().split("\\s+");
-//
-//        StringBuilder result = new StringBuilder();
-//
-//        for (String word : words) {
-//
-//            if (word.isEmpty()) {
-//                continue;
-//            }
-//
-//            String formatted =
-//                    word.substring(0, 1).toUpperCase() +
-//                            word.substring(1).toLowerCase();
-//
-//            if (result.length() > 0) {
-//                result.append("-");
-//            }
-//
-//            result.append(formatted);
-//        }
-//
-//        return result.toString();
 
         if (text == null || text.isBlank()) {
             return "";
