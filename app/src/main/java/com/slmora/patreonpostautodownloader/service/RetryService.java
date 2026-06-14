@@ -7,11 +7,13 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.JobStatus;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
+import com.slmora.patreonpostautodownloader.process.ProcessImageDownloadWorker;
 
 /**
  * The {@code RetryService} Class created for
@@ -43,6 +45,8 @@ import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
  */
 public class RetryService
 {
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(RetryService.class);
+
     private final PipelineQueues queues;
 
     public RetryService(PipelineQueues queues) {
@@ -52,6 +56,10 @@ public class RetryService
     public void sendToRetryOrFailed(ExcelJob job, String reason) {
         try {
             job.setErrorMessage(reason);
+
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()),"Retry or failed Job {} and reason", job.getJobId(), reason);
 
             if (job.getRetryCount() < PipelineConfig.getMaxRetry()) {
                 job.incrementRetryCount();

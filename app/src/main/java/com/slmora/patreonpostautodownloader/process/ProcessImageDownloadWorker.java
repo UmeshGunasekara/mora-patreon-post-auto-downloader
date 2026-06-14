@@ -12,6 +12,7 @@ import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.DownloadStatus;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
+import com.slmora.patreonpostautodownloader.model.ImageRecord;
 import com.slmora.patreonpostautodownloader.model.JobStatus;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineState;
@@ -140,15 +141,56 @@ public class ProcessImageDownloadWorker
 
             imageDownloadService.downloadImages(job, PipelineConfig.getImageOutputDirPath());
 
-            boolean hasSuccess = job.getImageRecords()
-                    .stream()
-                    .anyMatch(r -> r.getDownloadStatus() == DownloadStatus.SUCCESS);
+//            boolean hasSuccess = job.getImageRecords()
+//                    .stream()
+//                    .anyMatch(r -> r.getDownloadStatus() == DownloadStatus.SUCCESS);
+//
+//            if (hasSuccess) {
+//                job.setStatus(JobStatus.IMAGES_DOWNLOADED);
+//                queues.docxReadyQueue().put(job);
+//            } else {
+//                retryService.sendToRetryOrFailed(job, "No images downloaded successfully");
+//            }
 
-            if (hasSuccess) {
+            boolean hasJobSuccess = job.getImageRecords()
+                    .stream()
+                    .allMatch(imageRecord -> imageRecord.getDownloadStatus() == DownloadStatus.SUCCESS);
+
+            job.getImageRecords()
+                    .stream()
+                    .filter(imageRecord -> imageRecord.getDownloadStatus() != DownloadStatus.SUCCESS)
+                    .forEach(imageRecord -> LOGGER.warn(
+                            new MoraLoggerThreadInfo(
+                                    Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()
+                            ),
+                            "Image download failed for Job {}, Image URL: {}",
+                            job.getJobId(),
+                            imageRecord.getImageUrl()
+                    ));
+
+            if (!hasJobSuccess) {
+                LOGGER.error(new MoraLoggerThreadInfo(
+                                Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()
+                        ),
+                        "There are some images has not been downloaded successfully with full check");
+            }
+
+            boolean hasFails = job.getImageRecords()
+                    .stream()
+                    .anyMatch(r -> r.getDownloadStatus() == DownloadStatus.FAILED);
+
+            if(hasFails){
+                retryService.sendToRetryOrFailed(job, "There are some images has not been downloaded successfully");
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),"There are some images has not been downloaded successfully");
+            }else {
                 job.setStatus(JobStatus.IMAGES_DOWNLOADED);
                 queues.docxReadyQueue().put(job);
-            } else {
-                retryService.sendToRetryOrFailed(job, "No images downloaded successfully");
             }
 
         } catch (Exception e) {

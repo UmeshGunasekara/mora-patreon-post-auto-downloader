@@ -9,6 +9,7 @@ package com.slmora.patreonpostautodownloader.app;
 
 import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
+import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.controller.PatreonPostDownloadPipelineController;
 
 import java.io.IOException;
@@ -45,6 +46,7 @@ public class App
      */
     public static void main(String[] args)
     {
+        System.out.println(PipelineConfig.getToString());
         try {
             PatreonPostDownloadPipelineController pipeline = new PatreonPostDownloadPipelineController();
             LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),

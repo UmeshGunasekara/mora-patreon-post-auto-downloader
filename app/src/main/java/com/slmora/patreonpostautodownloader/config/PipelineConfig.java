@@ -265,6 +265,7 @@ public class PipelineConfig
                     ", processImageDownloadThreads=" + processImageDownloadThreads +
                     ", processDocxThreads=" + processDocxThreads +
                     ", maxRetry=" + maxRetry +
+                    ", maxRetry=" + patreonAccessCookie +
                     ", patreonAccessCookie='***'" +
                     '}';
         }
