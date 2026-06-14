@@ -122,6 +122,10 @@ public class PipelineConfig
         return CURRENT.processDocxThreads();
     }
 
+    public static int getProcessExcelThreads() {
+        return CURRENT.processExcelThreads();
+    }
+
     public static int getMaxRetry() {
         return CURRENT.maxRetry();
     }
@@ -159,6 +163,7 @@ public class PipelineConfig
                     requiredInt(p, "APP.FAILED_QUEUE_CAPACITY", 5000),
                     requiredInt(p, "APP.PROCESS_IMAGE_DOWNLOAD_THREADS", 10),
                     requiredInt(p, "APP.PROCESS_DOCX_THREADS", 3),
+                    requiredInt(p, "APP.PROCESS_EXCEL_THREADS", 3),
                     requiredInt(p, "APP.MAX_RETRY", 3),
 
                     requiredString(p, "APP.PATREON_ACCESS_COOKIE=REMOVED_SECRET")
@@ -230,6 +235,7 @@ public class PipelineConfig
             int failedQueueCapacity,
             int processImageDownloadThreads,
             int processDocxThreads,
+            int processExcelThreads,
             int maxRetry,
 
             String patreonAccessCookie
@@ -264,8 +270,9 @@ public class PipelineConfig
                     ", failedQueueCapacity=" + failedQueueCapacity +
                     ", processImageDownloadThreads=" + processImageDownloadThreads +
                     ", processDocxThreads=" + processDocxThreads +
+                    ", processExcelThreads=" + processExcelThreads +
                     ", maxRetry=" + maxRetry +
-                    ", maxRetry=" + patreonAccessCookie +
+                    ", patreonAccessCookie=" + patreonAccessCookie +
                     ", patreonAccessCookie='***'" +
                     '}';
         }

@@ -82,6 +82,7 @@ dependencies {
     // Mora Common Dependencies
     implementation("com.slmora.common.logging:mora-common-logging:3.1")
     implementation("com.slmora.common.io.properties:mora-common-access-properties:1.0")
+    implementation("com.slmora.common.uuid:mora-common-uuid:1.0")
 
     // Log4j Logging Dependencies
     implementation("org.apache.logging.log4j:log4j-core:${log4jVersion}")

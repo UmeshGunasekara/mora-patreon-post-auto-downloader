@@ -9,6 +9,7 @@ package com.slmora.patreonpostautodownloader.process;
 
 import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
+import com.slmora.common.uuid.MoraUuidUtilities;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.JobStatus;
@@ -22,12 +23,16 @@ import com.slmora.patreonpostautodownloader.service.UrlExecutionService;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -74,6 +79,7 @@ public class ProcessExcelProducer
     private final UrlExecutionService urlExecutionService;
     private final ExcelService excelService;
     private final JobPersistenceService jobPersistenceService;
+    private final ExecutorService processExcelPool;
 
     private final AtomicLong jobIdGenerator = new AtomicLong(1);
 
@@ -100,6 +106,7 @@ public class ProcessExcelProducer
         this.urlExecutionService = urlExecutionService;
         this.excelService = excelService;
         this.jobPersistenceService = jobPersistenceService;
+        this.processExcelPool = Executors.newFixedThreadPool(PipelineConfig.getProcessExcelThreads());
     }
 
     /**
@@ -111,23 +118,51 @@ public class ProcessExcelProducer
      * </p>
      */
     public void start() {
-
-        int index = 1;
-        String filePostStartDate=null;
         try {
-            String initUrl = Files.readString(PipelineConfig.getUrlInputPath()).trim();
+            List<String> initUrlList = Files.readAllLines(PipelineConfig.getUrlInputPath(), StandardCharsets.UTF_8);
 
-            if(initUrl.isEmpty()){
+            List<String> sanitizedInitUrlList = initUrlList.stream()
+                    .map(String::trim)
+                    .filter(url -> !url.isEmpty())
+                    .toList();
+
+            if (sanitizedInitUrlList.isEmpty()) {
+                LOGGER.error(threadInfo(), "No valid seed URLs found at path: {}", PipelineConfig.getUrlInputPath());
                 return;
             }
 
-            long jobId = jobIdGenerator.getAndIncrement();
+            for (String initUrl : sanitizedInitUrlList) {
+                final long initialJobId = jobIdGenerator.getAndIncrement();
+                processExcelPool.submit(() -> {
+                    try {
+                        processPostUrlForExcel(
+                                initUrl,
+                                PipelineConfig.getExcelPostSheetName(),
+                                PipelineConfig.getExcelOutputDirPath(),
+                                PipelineConfig.getExcelPostFileName(),
+                                1,
+                                null,
+                                initialJobId,
+                                null
+                        );
+                    } catch (RuntimeException e) {
+                        LOGGER.error(threadInfo(), e);
+                    }
+                });
+            }
 
-            LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().threadId(),
-                    Thread.currentThread().getStackTrace()),"Post URL execution Index : {} and Job-Id : {}", index, jobId);
+            processExcelPool.shutdown();
 
-            processPostUrlForExcel(initUrl, PipelineConfig.getExcelPostSheetName(), PipelineConfig.getExcelOutputDirPath(), PipelineConfig.getExcelPostFileName(), index, filePostStartDate, jobId);
+            try {
+                boolean completed = processExcelPool.awaitTermination(24, TimeUnit.HOURS);
+                if (!completed) {
+                    LOGGER.error(threadInfo(), "ProcessExcelProducer timeout reached. Forcing shutdown.");
+                    processExcelPool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                processExcelPool.shutdownNow();
+            }
 
         } catch (IOException e) {
             LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
@@ -157,7 +192,7 @@ public class ProcessExcelProducer
      * @param filePostStartDate first post date for the active Excel batch
      * @param jobId job identifier assigned to the active Excel batch
      */
-    private void processPostUrlForExcel(String initUrl, String excelSheetName, Path excelOutputDirPath, String excelFileName, int recursiveIndex, String filePostStartDate, long jobId)
+    private void processPostUrlForExcel(String initUrl, String excelSheetName, Path excelOutputDirPath, String excelFileName, int recursiveIndex, String filePostStartDate, long jobId, String uuidTempKey)
     {
         try {
             Optional<URLExecute> records;
@@ -178,7 +213,20 @@ public class ProcessExcelProducer
                     .parse(allPosts.getLast().getPublishedAt())
                     .format(DateTimeFormatter.ofPattern("yyyyMMdd"));
 
+            if(uuidTempKey == null || uuidTempKey.isEmpty()){
+                MoraUuidUtilities uuidUtils = new MoraUuidUtilities();
+
+                uuidTempKey = uuidUtils.getUniqueStringUUID(false);
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),"uuidTempKey generated :  {}", uuidTempKey);
+
+                excelFileName = excelFileName.replace("temp",uuidTempKey);
+            }
+
+
             Path excelOutputFilePath = excelOutputDirPath.resolve(excelFileName);
+
             excelService.createExcelFromRecords(allPosts,  excelOutputFilePath, excelSheetName);
 
             LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
@@ -188,7 +236,7 @@ public class ProcessExcelProducer
             if(recursiveIndex<=30) {
                 if(recursiveIndex==30){
                     File tempExcelFile = excelOutputDirPath.resolve(excelFileName).toFile();
-                    String newFileExcelName = excelFileName.replace("temp",filePostStartDate+"_"+filePostEndDate+"_J"+jobId);
+                    String newFileExcelName = excelFileName.replace(uuidTempKey,filePostStartDate+"_"+filePostEndDate+"_J"+jobId);
                     File newExcelFile = excelOutputDirPath.resolve(newFileExcelName).toFile();
 
                     LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
@@ -244,6 +292,8 @@ public class ProcessExcelProducer
 
                     recursiveIndex=1;
                     filePostStartDate=null;
+                    uuidTempKey=null;
+                    excelFileName=PipelineConfig.getExcelPostFileName();
 
                     LOGGER.debug(new MoraLoggerThreadInfo(
                                     Thread.currentThread().getName(),
@@ -287,7 +337,7 @@ public class ProcessExcelProducer
                 LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                         Thread.currentThread().threadId(),
                         Thread.currentThread().getStackTrace()),"processPostUrlExcel execute for next URL :  {}", urlExecute.getNextUrl());
-                processPostUrlForExcel(urlExecute.getNextUrl(), excelSheetName, excelOutputDirPath, excelFileName, recursiveIndex, filePostStartDate, jobId);
+                processPostUrlForExcel(urlExecute.getNextUrl(), excelSheetName, excelOutputDirPath, excelFileName, recursiveIndex, filePostStartDate, jobId, uuidTempKey);
             }
         } catch (InterruptedException | IOException e) {
             LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),

@@ -10,7 +10,6 @@ package com.slmora.patreonpostautodownloader.process;
 import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
-import com.slmora.patreonpostautodownloader.controller.PatreonPostDownloadPipelineController;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.JobStatus;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
@@ -61,7 +60,7 @@ public class ProcessDocxProducer
     private final CleanupService cleanupService;
     private final JobPersistenceService jobPersistenceService;
 
-    private final ExecutorService processCPool;
+    private final ExecutorService processDocxPool;
 
     public ProcessDocxProducer(
             PipelineQueues queues,
@@ -75,18 +74,18 @@ public class ProcessDocxProducer
         this.docxService = docxService;
         this.cleanupService = cleanupService;
         this.jobPersistenceService = jobPersistenceService;
-        this.processCPool = Executors.newFixedThreadPool(PipelineConfig.getProcessDocxThreads());
+        this.processDocxPool = Executors.newFixedThreadPool(PipelineConfig.getProcessDocxThreads());
     }
 
     public void start() {
         for (int i = 0; i < PipelineConfig.getProcessDocxThreads(); i++) {
-            processCPool.submit(this::workerLoop);
+            processDocxPool.submit(this::workerLoop);
         }
 
-        processCPool.shutdown();
+        processDocxPool.shutdown();
 
         try {
-            processCPool.awaitTermination(24, TimeUnit.HOURS);
+            processDocxPool.awaitTermination(24, TimeUnit.HOURS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
