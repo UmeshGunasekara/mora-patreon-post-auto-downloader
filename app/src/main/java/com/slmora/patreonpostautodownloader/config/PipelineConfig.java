@@ -166,7 +166,7 @@ public class PipelineConfig
                     requiredInt(p, "APP.PROCESS_EXCEL_THREADS", 3),
                     requiredInt(p, "APP.MAX_RETRY", 3),
 
-                    requiredString(p, "APP.PATREON_ACCESS_COOKIE=REMOVED_SECRET")
+                    requiredString(p, "APP.PATREON_ACCESS_COOKIE")
             );
 
             LOGGER.info(threadInfo(), "PipelineConfig loaded: {}", s.toMaskedString());
