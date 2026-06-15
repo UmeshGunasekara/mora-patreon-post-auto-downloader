@@ -98,9 +98,7 @@ public class PatreonPostDownloadPipelineController
         JobPersistenceService jobPersistenceService = new JobPersistenceService();
         RetryService retryService = new RetryService(queues);
 
-        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                Thread.currentThread().threadId(),
-                Thread.currentThread().getStackTrace()),"Service initialized");
+        LOGGER.debug(threadInfo(),"Service initialized");
 
         ProcessExcelProducer excelProducer =
                 new ProcessExcelProducer(

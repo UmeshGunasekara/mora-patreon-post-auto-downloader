@@ -7,7 +7,9 @@
  */
 package com.slmora.patreonpostautodownloader.process;
 
+import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
+import com.slmora.patreonpostautodownloader.controller.PatreonPostDownloadPipelineController;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineQueues;
 import com.slmora.patreonpostautodownloader.pipeline.PipelineState;
@@ -45,6 +47,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class FailedJobMonitor
 {
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(FailedJobMonitor.class);
+
     private final PipelineQueues queues;
     private final PipelineState state;
     private final JobPersistenceService jobPersistenceService;
@@ -76,14 +80,13 @@ public class FailedJobMonitor
 
                 jobPersistenceService.saveFailedJob(job);
 
-                System.err.println("Failed job persisted: " + job.getJobId());
+                LOGGER.info(threadInfo(),"Failed job persisted: {}", job.getJobId());
 
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.error(threadInfo(), e);
             }
         }
-
-        System.out.println("Failed job monitor finished.");
+        LOGGER.info(threadInfo(),"Failed job monitor finished.");
     }
 
     private static MoraLoggerThreadInfo threadInfo() {

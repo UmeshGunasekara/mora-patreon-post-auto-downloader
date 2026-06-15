@@ -101,11 +101,7 @@ public class ExcelService
 
         try {
             if (excelFile.exists()) {
-                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().threadId(),
-                                Thread.currentThread().getStackTrace()),
-                        "Excel file exists in {}",
-                        excelOutputFilePath.toString());
+                LOGGER.info(threadInfo(),"Excel file exists in {}",excelOutputFilePath.toString());
 
                 try (FileInputStream fis = new FileInputStream(excelFile)) {
                     workbook = WorkbookFactory.create(fis);
@@ -118,11 +114,7 @@ public class ExcelService
                 }
 
             } else {
-                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().threadId(),
-                                Thread.currentThread().getStackTrace()),
-                        "Excel file not exists in {}",
-                        excelOutputFilePath.toString());
+                LOGGER.info(threadInfo(),"Excel file not exists in {}",excelOutputFilePath.toString());
 
                 workbook = new XSSFWorkbook();
                 sheet = workbook.createSheet(excelSheetName);
@@ -156,11 +148,7 @@ public class ExcelService
 
             try (FileOutputStream fos = new FileOutputStream(excelFile)) {
                 workbook.write(fos);
-                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().threadId(),
-                                Thread.currentThread().getStackTrace()),
-                        "Excel file updated in {}",
-                        excelOutputFilePath.toString());
+                LOGGER.info(threadInfo(),"Excel file updated in {}",excelOutputFilePath.toString());
             }
         }finally {
             if(workbook != null){
@@ -219,9 +207,9 @@ public class ExcelService
         cell.setCellStyle(style);
     }
 
-    private List<ImageRecord> readImageRecordsFromExcel(Path xlsx, String excelSheetName) {
-        try (InputStream in = Files.newInputStream(xlsx);
-             Workbook workbook = new XSSFWorkbook(in)) {
+    private List<ImageRecord> readImageRecordsFromExcel(Path excelFilePath, String excelSheetName) {
+        try (InputStream inputStream = Files.newInputStream(excelFilePath);
+             Workbook workbook = new XSSFWorkbook(inputStream)) {
 
             List<ImageRecord> items = new ArrayList<>();
 
@@ -247,16 +235,9 @@ public class ExcelService
                 DateParts dateParts = splitPublishedAt(publishedAt);
                 String time = dateParts.getTime().replace(":", "-");
 
-                LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                                Thread.currentThread().threadId(),
-                                Thread.currentThread().getStackTrace()),
+                LOGGER.debug(threadInfo(),
                         "Excel raw information \n\tid : {} \n\tpublished_at : {} \n\ttitle : {} \n\tlarge_url : {} \n\tdateParts : {} \n\ttime : {}",
-                        id,
-                        publishedAt,
-                        title,
-                        imageUrl,
-                        dateParts.getDate(),
-                        time);
+                        id,publishedAt,title,imageUrl,dateParts.getDate(),time);
 
                 if (!imageUrl.isBlank()) {
                     List<String> images = new ArrayList<>();
@@ -280,9 +261,7 @@ public class ExcelService
 
             return items;
         } catch (IOException e) {
-            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
-                    Thread.currentThread().threadId(),
-                    Thread.currentThread().getStackTrace()), e);
+            LOGGER.error(threadInfo(), e);
             throw new RuntimeException(e);
         }
     }

@@ -7,23 +7,21 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.model.DateParts;
-import com.slmora.patreonpostautodownloader.model.DownloadStatus;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
-import com.slmora.patreonpostautodownloader.model.ImageRecord;
+import com.slmora.patreonpostautodownloader.process.ProcessDocxProducer;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.apache.poi.xwpf.usermodel.Document;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.docx4j.dml.wordprocessingDrawing.Inline;
 import org.docx4j.jaxb.Context;
+import org.docx4j.openpackaging.exceptions.Docx4JException;
+import org.docx4j.openpackaging.exceptions.InvalidFormatException;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.BinaryPartAbstractImage;
 import org.docx4j.wml.Br;
@@ -39,14 +37,14 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -87,64 +85,33 @@ import java.util.regex.Pattern;
  */
 public class DocxService
 {
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(DocxService.class);
+
     private static final ObjectFactory WML_OBJECT_FACTORY = Context.getWmlObjectFactory();
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
 
-    public void createDocx(ExcelJob job, Path outputDir, String docxFileNamePattern, String docxFileName) throws Exception {
+    public void createDocx(ExcelJob job, Path docxOutputDirPath, String docxFileNamePattern, String tempDocxFileName, String excelSheetName) throws
+            IOException,
+            Docx4JException
+    {
 
-        Path docxFile = outputDir.resolve(getFinalDocxFileName(job.getExcelFile().getFileName().toString(), docxFileNamePattern, docxFileName));
+        String finalDocxFileName = getFinalDocxFileName(job.getExcelFile().getFileName().toString(), docxFileNamePattern, tempDocxFileName);
+        LOGGER.info(threadInfo(),"finalDocxFileName is {}", finalDocxFileName);
 
-        writeWordFromExcel(job.getExcelFile().toString(), docxFile.toString());
+        Path docxFilePath = docxOutputDirPath.resolve(finalDocxFileName);
 
-//        try (XWPFDocument document = new XWPFDocument();
-//             OutputStream os = Files.newOutputStream(docxFile)) {
-//
-//            XWPFParagraph title = document.createParagraph();
-//            XWPFRun titleRun = title.createRun();
-//            titleRun.setBold(true);
-//            titleRun.setFontSize(16);
-//            titleRun.setText("Generated DOCX for Job " + job.getJobId());
-//
-//            for (ImageRecord record : job.getImageRecords()) {
-//                if (record.getDownloadStatus() != DownloadStatus.SUCCESS) {
-//                    continue;
-//                }
-//
-//                Path imageFile = record.getDownloadedImagePath();
-//
-//                if (imageFile == null || !Files.exists(imageFile)) {
-//                    continue;
-//                }
-//
-//                XWPFParagraph paragraph = document.createParagraph();
-//                XWPFRun run = paragraph.createRun();
-//
-//                run.setText("Row: " + record.getRowNumber());
-//                run.addBreak();
-//
-//                try (InputStream imageStream = Files.newInputStream(imageFile)) {
-//                    run.addPicture(
-//                            imageStream,
-//                            Document.PICTURE_TYPE_JPEG,
-//                            imageFile.getFileName().toString(),
-//                            300 * 9525,
-//                            200 * 9525
-//                    );
-//                }
-//
-//                run.addBreak();
-//            }
-//
-//            document.write(os);
-//        }
+        writeOnDocxFromExcel(job.getExcelFile().toString(), docxFilePath.toString(), excelSheetName);
     }
 
-    private void writeWordFromExcel(String excelFile, String outputWord) throws Exception {
-        try (FileInputStream fis = new FileInputStream(excelFile);
+    private void writeOnDocxFromExcel(String excelFilePath, String docxFilePath, String excelSheetName) throws
+            IOException, Docx4JException
+    {
+        try (FileInputStream fis = new FileInputStream(excelFilePath);
              Workbook workbook = new XSSFWorkbook(fis)) {
 
             WordprocessingMLPackage wordMLPackage = WordprocessingMLPackage.createPackage();
 
-            Sheet sheet = workbook.getSheetAt(0);
+            Sheet sheet = workbook.getSheet(excelSheetName);
             DataFormatter formatter = new DataFormatter();
             Row headerRow = sheet.getRow(0);
 
@@ -208,6 +175,7 @@ public class DocxService
                                     280);
                             wordMLPackage.getMainDocumentPart().addObject(imageParagraph);
                         } catch (Exception ex) {
+                            LOGGER.error(threadInfo(), ex);
                             wordMLPackage.getMainDocumentPart().addObject(
                                     createParagraph("[Image download failed] " + image)
                             );
@@ -222,19 +190,19 @@ public class DocxService
                 wordMLPackage.getMainDocumentPart().addObject(createParagraph("")); // blank line
             }
 
-            wordMLPackage.save(new File(outputWord));
+            wordMLPackage.save(new File(docxFilePath));
         }
     }
 
-    private String getFinalDocxFileName(String excelFileName, String docxFileNamePattern, String docxFileName)
+    private String getFinalDocxFileName(String excelFileName, String docxFileNamePattern, String tempDocxFileName)
     {
         Pattern pattern = Pattern.compile(docxFileNamePattern);
         Matcher matcher = pattern.matcher(excelFileName);
 
         if (matcher.matches()) {
             String result = matcher.group(1);
-            docxFileName = docxFileName.replace("temp", result);
-            return docxFileName;
+            tempDocxFileName = tempDocxFileName.replace("temp", result);
+            return tempDocxFileName;
         }
 
         return "_tmp";
@@ -340,15 +308,18 @@ public class DocxService
     }
 
     private byte[] downloadImage(HttpClient client, String imageUrl) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(imageUrl))
+        URI uri = URI.create(imageUrl.trim());
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(REQUEST_TIMEOUT)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+                .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
                 .GET()
-                .header("User-Agent", "Mozilla/5.0")
                 .build();
 
         HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
 
-        if (response.statusCode() != 200) {
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IllegalStateException("Image download failed. HTTP status: " + response.statusCode());
         }
 
@@ -401,34 +372,10 @@ public class DocxService
 
             return sb.toString().trim();
         } catch (Exception e) {
+            LOGGER.error(threadInfo(), e);
             return contentJsonString;
         }
     }
-
-//    private static void appendTextNodes(JsonNode node, StringBuilder sb) {
-//        if (node == null || node.isMissingNode() || node.isNull()) {
-//            return;
-//        }
-//
-//        if (node.isObject()) {
-//            String type = node.path("type").asText("");
-//
-//            if ("paragraph".equals(type) && sb.length() > 0) {
-//                sb.append(System.lineSeparator()).append(System.lineSeparator());
-//            }
-//
-//            if (node.has("text")) {
-//                sb.append(node.path("text").asText(""));
-//            }
-//
-//            node.properties().forEach((key, value) -> appendTextNodes(value, sb));
-//
-//        } else if (node.isArray()) {
-//            for (JsonNode child : node) {
-//                appendTextNodes(child, sb);
-//            }
-//        }
-//    }
 
     private void appendTextNodes(JsonNode node, StringBuilder sb) {
         if (node == null || node.isMissingNode() || node.isNull()) {
@@ -447,7 +394,6 @@ public class DocxService
                 sb.append(text);
             }
 
-//            node.properties().forEach((key, value) -> appendTextNodes(value, sb));
             node.properties().forEach(entry -> appendTextNodes(entry.getValue(), sb));
 
         } else if (node.isArray()) {

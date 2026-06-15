@@ -7,10 +7,12 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
 import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 import com.slmora.patreonpostautodownloader.model.ImageRecord;
+import com.slmora.patreonpostautodownloader.process.FailedJobMonitor;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -50,6 +52,8 @@ import java.time.format.DateTimeFormatter;
  */
 public class JobPersistenceService
 {
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(JobPersistenceService.class);
+
     private final Path jobLogFile;
     private final Path failedLogFile;
 
@@ -92,7 +96,7 @@ public class JobPersistenceService
                 writer.newLine();
 
             } catch (Exception e) {
-                System.err.println("Failed to save status: " + e.getMessage());
+                LOGGER.error(threadInfo(), "Failed to save status: {}", e);
             }
         }
     }
@@ -114,7 +118,7 @@ public class JobPersistenceService
                 writer.newLine();
 
             } catch (Exception e) {
-                System.err.println("Failed to save success job: " + e.getMessage());
+                LOGGER.error(threadInfo(), "Failed to save success job: {}", e);
             }
         }
     }
@@ -167,7 +171,7 @@ public class JobPersistenceService
                 writer.newLine();
 
             } catch (Exception e) {
-                System.err.println("Failed to save failed job: " + e.getMessage());
+                LOGGER.error(threadInfo(), "Failed to save failed job: {}", e);
             }
         }
     }
