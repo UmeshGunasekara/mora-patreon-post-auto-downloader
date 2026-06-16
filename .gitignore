@@ -26,3 +26,6 @@ build
 #Jetbrains
 *.iml
 .idea
+
+#Environment
+.env

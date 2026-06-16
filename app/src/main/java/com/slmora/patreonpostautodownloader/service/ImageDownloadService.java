@@ -95,7 +95,9 @@ public class ImageDownloadService
                     }
 
                 } catch (Exception e) {
-                    LOGGER.error(threadInfo(), e);
+                    LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()), e);
                     return new Result(record, false, null, e.getMessage());
                 }finally {
                     semaphore.release();
@@ -108,13 +110,22 @@ public class ImageDownloadService
             Result result = future.get();
             if (result.success()) {
                 ok++;
-                LOGGER.info(threadInfo(),"[OK]   " + result.imageRecord().getImageName() + " -> " + result.path());
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "[OK]   " + result.imageRecord().getImageName() + " -> " + result.path());
             } else {
                 fail++;
-                LOGGER.error(threadInfo(),"[FAIL] " + result.imageRecord().getImageName() + " (" + result.imageRecord().getImageUrl() + ") : " + result.error());
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "[FAIL] " + result.imageRecord().getImageName() + " (" + result.imageRecord().getImageUrl() + ") : " + result.error());
             }
         }
-        LOGGER.info(threadInfo(),"Done. Success=" + ok + " Fail=" + fail);
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Done. Success=" + ok + " Fail=" + fail);
     }
 
     public void retryFailedImages(ExcelJob job, Path imageOutputDir) throws ExecutionException, InterruptedException
@@ -138,7 +149,9 @@ public class ImageDownloadService
                         }
 
                     } catch (Exception e) {
-                        LOGGER.error(threadInfo(), e);
+                        LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                        Thread.currentThread().threadId(),
+                                        Thread.currentThread().getStackTrace()), e);
                         return new Result(record, false, null, e.getMessage());
                     }finally {
                         semaphore.release();
@@ -152,13 +165,22 @@ public class ImageDownloadService
             Result result = future.get();
             if (result.success()) {
                 ok++;
-                LOGGER.info(threadInfo(),"[OK]   " + result.imageRecord().getImageName() + " -> " + result.path());
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "[OK]   " + result.imageRecord().getImageName() + " -> " + result.path());
             } else {
                 fail++;
-                LOGGER.error(threadInfo(),"[FAIL] " + result.imageRecord().getImageName() + " (" + result.imageRecord().getImageUrl() + ") : " + result.error());
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "[FAIL] " + result.imageRecord().getImageName() + " (" + result.imageRecord().getImageUrl() + ") : " + result.error());
             }
         }
-        LOGGER.info(threadInfo(),"Done. Success=" + ok + " Fail=" + fail);
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Done. Success=" + ok + " Fail=" + fail);
     }
 
     private Optional<Path> downloadSingleImage(
@@ -212,7 +234,10 @@ public class ImageDownloadService
 
             try (InputStream body = response.body()) {
                 Files.copy(body, lastImageFile, StandardCopyOption.REPLACE_EXISTING);
-                LOGGER.info(threadInfo(),"Image has  been downloaded in {}", lastImageFile.toAbsolutePath());
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Image has  been downloaded in {}", lastImageFile.toAbsolutePath());
             }
 
 //            Files.write(imagePath, response.body());
@@ -226,7 +251,9 @@ public class ImageDownloadService
         } catch (Exception e) {
             record.setDownloadStatus(DownloadStatus.FAILED);
             record.setErrorMessage(e.getMessage());
-            LOGGER.error(threadInfo(),e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
         }
         return Optional.empty();
     }
@@ -281,9 +308,4 @@ public class ImageDownloadService
 
     private record Result(
             ImageRecord imageRecord, boolean success, String path, String error) {}
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
-    }
 }

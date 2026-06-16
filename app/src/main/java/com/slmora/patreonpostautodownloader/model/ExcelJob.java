@@ -63,6 +63,8 @@ public class ExcelJob
      */
     private final Path excelFile;
 
+    private volatile Path docxFile;
+
     /**
      * Thread-safe collection of image records parsed from the Excel workbook.
      */

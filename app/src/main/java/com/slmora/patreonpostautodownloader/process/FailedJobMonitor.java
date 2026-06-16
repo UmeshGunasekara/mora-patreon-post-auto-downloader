@@ -80,17 +80,20 @@ public class FailedJobMonitor
 
                 jobPersistenceService.saveFailedJob(job);
 
-                LOGGER.info(threadInfo(),"Failed job persisted: {}", job.getJobId());
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Failed job persisted: {}", job.getJobId());
 
             } catch (Exception e) {
-                LOGGER.error(threadInfo(), e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()), e);
             }
         }
-        LOGGER.info(threadInfo(),"Failed job monitor finished.");
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Failed job monitor finished.");
     }
 }

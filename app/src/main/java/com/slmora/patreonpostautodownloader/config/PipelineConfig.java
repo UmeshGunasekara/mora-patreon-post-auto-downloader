@@ -143,14 +143,14 @@ public class PipelineConfig
 
     private static Snapshot loadSnapshot() {
         try {
-            Properties p = new MoraAccessProperties().getAllPropertiesFromResource("app.properties");
+            Properties p = new MoraAccessProperties().getAllPropertiesFromResource("app.properties",Path.of("D:\\SLMORAWorkSpace\\IntelliJProjects\\slmora-project\\mora-patreon-post-auto-downloader\\.env"));
 
             Snapshot s = new Snapshot(
                     requiredPath(p, "APP.URL_INPUT_PATH"),
                     requiredPath(p, "APP.EXCEL_OUTPUT_DIR_PATH"),
                     requiredPath(p, "APP.IMAGE_OUTPUT_DIR_PATH"),
                     requiredPath(p, "APP.DOCX_OUTPUT_DIR_PATH"),
-                    requiredPath(p, "APP.FAILD_OUTPUT_DIR_PATH"),
+                    requiredPath(p, "APP.FAILED_OUTPUT_DIR_PATH"),
 
                     p.getProperty("APP.EXCEL_POST_SHEET_NAME", "Posts"),
                     p.getProperty("APP.EXCEL_POST_FILE_NAME", "patreon_posts_output_temp.xlsx"),
@@ -169,27 +169,36 @@ public class PipelineConfig
                     requiredString(p, "APP.PATREON_ACCESS_COOKIE")
             );
 
-            LOGGER.info(threadInfo(), "PipelineConfig loaded: {}", s.toMaskedString());
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                    Thread.currentThread().threadId(),
+                    Thread.currentThread().getStackTrace()),
+                    "PipelineConfig loaded: {}", s.toMaskedString());
             return s;
         } catch (Exception e) {
-            LOGGER.error(threadInfo(), "Failed to load PipelineConfig. Keeping previous snapshot if available.", e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Failed to load PipelineConfig. Keeping previous snapshot if available.", e);
 
             // If called at class init and this fails, CURRENT is not initialized yet -> fail fast.
             if (CURRENT == null) {
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "PipelineConfig initialization failed");
                 throw new IllegalStateException("PipelineConfig initialization failed", e);
             }
             return CURRENT;
         }
     }
 
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
-    }
-
     private static String requiredString(Properties p, String key) {
         String v = p.getProperty(key);
         if (v == null || v.isBlank()) {
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Missing required property: {}", key);
             throw new IllegalArgumentException("Missing required property: " + key);
         }
         return v;
@@ -198,6 +207,10 @@ public class PipelineConfig
     private static String requiredString(Properties p, String key,  String defaultValue) {
         String v = p.getProperty(key, defaultValue);
         if (v == null || v.isBlank()) {
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Missing required property: {}", key);
             throw new IllegalArgumentException("Missing required property: " + key);
         }
         return v;
@@ -212,6 +225,10 @@ public class PipelineConfig
         try {
             return Integer.parseInt(raw);
         } catch (NumberFormatException ex) {
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Invalid integer for property {}: Raw {}" ,key ,raw, ex);
             throw new IllegalArgumentException("Invalid integer for property " + key + ": " + raw, ex);
         }
     }

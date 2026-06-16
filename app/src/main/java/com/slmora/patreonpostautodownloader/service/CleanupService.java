@@ -7,7 +7,9 @@
  */
 package com.slmora.patreonpostautodownloader.service;
 
+import com.slmora.common.logging.MoraLogger;
 import com.slmora.common.logging.MoraLoggerThreadInfo;
+import com.slmora.patreonpostautodownloader.config.PipelineConfig;
 import com.slmora.patreonpostautodownloader.model.ExcelJob;
 
 import java.io.IOException;
@@ -43,20 +45,22 @@ import java.nio.file.Files;
  */
 public class CleanupService
 {
+    private final static MoraLogger LOGGER = MoraLogger.getLogger(CleanupService.class);
+
     public void cleanupAfterSuccess(ExcelJob job) {
         try {
             // Optional:
             // Files.deleteIfExists(job.getExcelFile());
-
-            System.out.println("Cleanup completed for job: " + job.getJobId());
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Cleanup completed for job: {}", job.getJobId());
 
         } catch (Exception e) {
-            System.err.println(
-                    "Cleanup failed for job "
-                            + job.getJobId()
-                            + ": "
-                            + e.getMessage()
-            );
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Cleanup failed for job: {} with {}", job.getJobId(), e);
         }
     }
 
@@ -64,10 +68,5 @@ public class CleanupService
         if (job.getExcelFile() != null) {
             Files.deleteIfExists(job.getExcelFile());
         }
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

@@ -96,7 +96,10 @@ public class ProcessImageDownloadWorker
 
         state.setProcessImageDownloadWorkerFinished(true);
 
-        LOGGER.info(threadInfo(),"ProcessImageDownloadWorker Finished");
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "ProcessImageDownloadWorker Finished");
     }
 
     private void workerLoop() {
@@ -113,19 +116,27 @@ public class ProcessImageDownloadWorker
                 }
                 processJob(job);
             } catch (InterruptedException e) {
-                LOGGER.error(threadInfo(), e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()), e);
             }
         }
     }
 
     private void processJob(ExcelJob job) {
         try {
-            LOGGER.info(threadInfo(),"Start ProcessImageDownloadWorker for excel Job {}", job);
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Start ProcessImageDownloadWorker for excel Job {}", job);
 
             job.setStatus(JobStatus.IMAGE_DOWNLOAD_IN_PROGRESS);
             job.getImageRecords().clear();
 
-            LOGGER.debug(threadInfo(),"Clear image collection in excel Job {}",job.getJobId());
+            LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Clear image collection in excel Job {}",job.getJobId());
 
             job.getImageRecords().addAll(
                     excelService.readImageRecords(job.getExcelFile(), PipelineConfig.getExcelPostSheetName())
@@ -151,12 +162,18 @@ public class ProcessImageDownloadWorker
             job.getImageRecords()
                     .stream()
                     .filter(imageRecord -> imageRecord.getDownloadStatus() != DownloadStatus.SUCCESS)
-                    .forEach(imageRecord -> LOGGER.warn(threadInfo(), "Image download failed for Job {}, Image URL: {}",
+                    .forEach(imageRecord -> LOGGER.warn(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "Image download failed for Job {}, Image URL: {}",
                             job.getJobId(),imageRecord.getImageUrl()
                     ));
 
             if (!hasJobSuccess) {
-                LOGGER.error(threadInfo(), "There are some images has not been downloaded successfully with full check");
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "There are some images has not been downloaded successfully with full check");
             }
 
             boolean hasFails = job.getImageRecords()
@@ -165,20 +182,20 @@ public class ProcessImageDownloadWorker
 
             if(hasFails){
                 retryService.sendToRetryOrFailed(job, "There are some images has not been downloaded successfully");
-                LOGGER.error(threadInfo(),"There are some images has not been downloaded successfully");
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "There are some images has not been downloaded successfully");
             }else {
                 job.setStatus(JobStatus.IMAGES_DOWNLOADED);
                 queues.docxReadyQueue().put(job);
             }
 
         } catch (Exception e) {
-            LOGGER.error(threadInfo(), e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
             retryService.sendToRetryOrFailed(job, e.getMessage());
         }
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

@@ -7,7 +7,7 @@
 [![Log4j2](https://img.shields.io/badge/Log4j-2.24.3-blue)](https://logging.apache.org/log4j/2.x/)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey)](#meta-data)
 
-Automated Patreon post pipeline that fetches API data, builds batch Excel files, downloads images, and generates DOCX reports with retry and failure tracking.
+Automated Patreon post pipeline that fetches API data, builds batch Excel files, downloads images (not videos), and generates DOCX reports with retry and failure tracking.
 
 ## Table of Contents
 
@@ -231,6 +231,13 @@ Key runtime properties:
 - `APP.MAX_RETRY`
 - `APP.PATREON_ACCESS_COOKIE=REMOVED_SECRET`
 
+URL input file format:
+- Use .txt file with just API url fetching from the Patreon browser API call. Can be listed multiple URLs for multiple runs.
+
+Access cookie:
+- Use a valid Patreon session cookie value for `APP.PATREON_ACCESS_COOKIE` to authenticate API calls. This is required for successful data retrieval.
+- This one can fetch from the browser's developer tools (network tab) when making a Patreon API call while logged in. Use google chrome for better experience.
+
 Additional logging config:
 - `app/src/main/resources/log4j2.xml`
 - Update `LOG_DIR` to your local path when needed.
@@ -365,10 +372,11 @@ Quantitative evaluation (throughput, latency, resource profile): `TBD`.
 
 ## Revision History
 
-| _Date_     | _Revision_ | _Description_                                  | _Author_ |
-|:-----------|:-----------|:-----------------------------------------------|:---------|
-| 06/11/2026 | 1.0        | Initiate gradle project                        | SLMORA   |
+| _Date_     | _Revision_ | _Description_                                   | _Author_ |
+|:-----------|:-----------|:------------------------------------------------|:---------|
+| 06/11/2026 | 1.0        | Initiate gradle project                         | SLMORA   |
 | 06/15/2026 | 1.1        | Professional README restructure and full update | SLMORA   |
+| 06/16/2026 | 1.2        | Finalize the operations                         | SLMORA   |
 
 - 06/11/2026 12:00 AM
     + Generate gradle project

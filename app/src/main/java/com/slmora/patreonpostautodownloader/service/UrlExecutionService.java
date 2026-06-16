@@ -62,27 +62,44 @@ public class UrlExecutionService
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
 
-    public Optional<URLExecute> executeUrl(String url)
+    public Optional<URLExecute> executeUrl(String url, int recursiveIndex)
     {
         URLExecute urlExecute;
 
         if (url == null || url.isBlank()) {
-            LOGGER.error(threadInfo(), "Input URL file is empty.");
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Input URL file is empty with recursive index: {}", recursiveIndex);
             return Optional.empty();
         }
 
-        LOGGER.info(threadInfo(),"Processing URL: {}", url);
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Processing URL: {}", url);
 
         try {
             String jsonResponse = fetchJsonResponseForUrl(url);
-            LOGGER.debug(threadInfo(),"Processing URL jsonResponse: {}", jsonResponse);
+            LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Processing URL jsonResponse: {}", jsonResponse);
 
             urlExecute = extractPostsFromJson(jsonResponse);
-            LOGGER.info(threadInfo(),"Fetched posts: {}", urlExecute.getPostRecordList().size());
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Fetched posts: {}", urlExecute.getPostRecordList().size());
 
-        } catch (IOException | InterruptedException e) {
-            LOGGER.error(threadInfo(), "Error processing URL: {}", url);
-            LOGGER.error(threadInfo(), e);
+        } catch (Exception e) {
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Error processing URL: {}  with recursive index: {}", url,  recursiveIndex);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
             return Optional.empty();
         }
         return Optional.of(urlExecute);
@@ -220,11 +237,6 @@ public class UrlExecutionService
     private int getInt(JsonNode node, String fieldName) {
         JsonNode valueNode = node.path(fieldName);
         return valueNode.isMissingNode() || valueNode.isNull() ? 0 : valueNode.asInt();
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 
 }

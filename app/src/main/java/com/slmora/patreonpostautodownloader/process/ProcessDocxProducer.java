@@ -92,7 +92,10 @@ public class ProcessDocxProducer
 
         state.setProcessDocxProducerFinished(true);
 
-        LOGGER.info(threadInfo(),"ProcessDocx Finished");
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "ProcessDocx Finished");
     }
 
     private void workerLoop() {
@@ -112,7 +115,9 @@ public class ProcessDocxProducer
                 createDocx(job);
 
             } catch (Exception e) {
-                LOGGER.error(threadInfo(), e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()), e);
             }
         }
     }
@@ -120,7 +125,10 @@ public class ProcessDocxProducer
     private void createDocx(ExcelJob job) {
         try {
 
-            LOGGER.info(threadInfo(),"Start ProcessDocx for excel Job {}", job);
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Start ProcessDocx for excel Job {}", job);
 
             job.setStatus(JobStatus.DOCX_CREATION_IN_PROGRESS);
 
@@ -132,11 +140,16 @@ public class ProcessDocxProducer
 
             cleanupService.cleanupAfterSuccess(job);
 
-            LOGGER.info(threadInfo(),"ProcessDocx completed for Job {}", job.getJobId());
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "ProcessDocx completed for Job {}", job.getJobId());
 
         } catch (Exception e) {
             try {
-                LOGGER.error(threadInfo(), e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()), e);
                 job.setStatus(JobStatus.FAILED);
                 job.setErrorMessage("DOCX failed: " + e.getMessage());
 
@@ -144,14 +157,11 @@ public class ProcessDocxProducer
                 jobPersistenceService.saveFailedJob(job);
 
             } catch (InterruptedException ex) {
-                LOGGER.error(threadInfo(), ex);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()), ex);
                 Thread.currentThread().interrupt();
             }
         }
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

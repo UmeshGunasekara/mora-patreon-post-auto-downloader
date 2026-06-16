@@ -127,7 +127,10 @@ public class ProcessExcelProducer
                     .toList();
 
             if (sanitizedInitUrlList.isEmpty()) {
-                LOGGER.error(threadInfo(), "No valid seed URLs found at path: {}", PipelineConfig.getUrlInputPath());
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "No valid seed URLs found at path: {}", PipelineConfig.getUrlInputPath());
                 return;
             }
 
@@ -146,7 +149,9 @@ public class ProcessExcelProducer
                                 null
                         );
                     } catch (RuntimeException e) {
-                        LOGGER.error(threadInfo(), e);
+                        LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                        Thread.currentThread().threadId(),
+                                        Thread.currentThread().getStackTrace()), e);
                     }
                 });
             }
@@ -156,7 +161,10 @@ public class ProcessExcelProducer
             try {
                 boolean completed = processExcelPool.awaitTermination(24, TimeUnit.HOURS);
                 if (!completed) {
-                    LOGGER.error(threadInfo(), "ProcessExcelProducer timeout reached. Forcing shutdown.");
+                    LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "ProcessExcelProducer timeout reached. Forcing shutdown.");
                     processExcelPool.shutdownNow();
                 }
             } catch (InterruptedException e) {
@@ -165,10 +173,15 @@ public class ProcessExcelProducer
             }
 
         } catch (IOException e) {
-            LOGGER.error(threadInfo(), e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
         } finally {
             state.setProcessExcelProducerFinished(true);
-            LOGGER.info(threadInfo(),"Excel producer process finished");
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Excel producer process finished");
         }
     }
 
@@ -193,7 +206,7 @@ public class ProcessExcelProducer
         try {
             Optional<URLExecute> records;
             do{
-                records = urlExecutionService.executeUrl(initUrl);
+                records = urlExecutionService.executeUrl(initUrl, recursiveIndex);
             }while(records.isEmpty());
 
             URLExecute urlExecute = records.get();
@@ -213,7 +226,10 @@ public class ProcessExcelProducer
                 MoraUuidUtilities uuidUtils = new MoraUuidUtilities();
 
                 uuidTempKey = uuidUtils.getUniqueStringUUID(false);
-                LOGGER.info(threadInfo(),"uuidTempKey generated :  {}", uuidTempKey);
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "uuidTempKey generated :  {}", uuidTempKey);
 
                 excelFileName = excelFileName.replace("temp",uuidTempKey);
             }
@@ -223,59 +239,36 @@ public class ProcessExcelProducer
 
             excelService.createExcelFromRecords(allPosts,  excelOutputFilePath, excelSheetName);
 
-            LOGGER.info(threadInfo(),"processPostUrlExcel execute File Start :  {},  Index : {}", filePostStartDate, recursiveIndex);
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "processPostUrlExcel execute File Start :  {},  Index : {}", filePostStartDate, recursiveIndex);
 
             if(recursiveIndex<=30) {
                 if(recursiveIndex==30){
-                    File tempExcelFile = excelOutputDirPath.resolve(excelFileName).toFile();
-                    String newFileExcelName = excelFileName.replace(uuidTempKey,filePostStartDate+"_"+filePostEndDate+"_J"+jobId);
-                    File newExcelFile = excelOutputDirPath.resolve(newFileExcelName).toFile();
+                    excelFileFinalizeForJob(excelOutputDirPath,
+                            excelFileName,
+                            recursiveIndex,
+                            filePostStartDate,
+                            jobId,
+                            uuidTempKey,
+                            filePostEndDate);
 
-                    LOGGER.info(threadInfo(),"Excel file created finalizing for Index {}", recursiveIndex);
-
-                    // Retry rename because Windows file handles can briefly remain locked after workbook writes.
-                    boolean renamed = false;
-                    for (int attempt = 1; attempt <= 3; attempt++) {
-                        if (tempExcelFile.renameTo(newExcelFile)) {
-                            renamed = true;
-                            LOGGER.info(threadInfo(),"Renamed successfully Excel file name: {} on attempt {}",newExcelFile.getAbsolutePath(), attempt);
-                            break;
-                        }
-
-                        LOGGER.error(threadInfo(),"Rename failed for File Name : {} on attempt {}/3",newFileExcelName, attempt);
-
-                        if (attempt < 3) {
-                            try {
-                                Thread.sleep(1000);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                LOGGER.error(threadInfo(),"Rename retry interrupted for File Name : {}",newFileExcelName);
-                                throw new RuntimeException("Rename retry interrupted for file: " + newFileExcelName, e);
-                            }
-                        }
-                    }
-
-                    if (!renamed) {
-                        LOGGER.error(threadInfo(),"Rename failed after 3 attempts for File Name : {}",newFileExcelName);
-                        throw new RuntimeException("Rename failed after 3 attempts for file: " + newFileExcelName);
-                    }
-
+                    jobId = jobIdGenerator.getAndIncrement();
                     recursiveIndex=1;
                     filePostStartDate=null;
                     uuidTempKey=null;
                     excelFileName=PipelineConfig.getExcelPostFileName();
 
-                    LOGGER.debug(threadInfo(),"Reset recursive index for next iteration with index : {}",recursiveIndex);
+                    LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "Reset recursive index for next iteration with index : {}",recursiveIndex);
 
-                    ExcelJob job = new ExcelJob(jobId, excelOutputDirPath.resolve(newFileExcelName));
-                    job.setStatus(JobStatus.EXCEL_CREATED);
-                    jobPersistenceService.saveJobStatus(job);
-                    queues.excelReadyQueue().put(job);
-
-                    LOGGER.debug(threadInfo(),"Added new ExcelJob in to ready queue : {}",job);
-
-                    jobId = jobIdGenerator.getAndIncrement();
-                    LOGGER.debug(threadInfo(),"Increment new Job ID : {}",jobId);
+                    LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "Increment new Job ID : {}",jobId);
 
                     try {
                         Thread.sleep(1000);
@@ -283,21 +276,113 @@ public class ProcessExcelProducer
                         Thread.currentThread().interrupt();
                     }
 
-                    LOGGER.info(threadInfo(),"After 1000 ms");
+                    LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "After 1000 ms");
 
                 }else {
                     recursiveIndex++;
                 }
-                LOGGER.info(threadInfo(),"processPostUrlExcel execute for next URL :  {}", urlExecute.getNextUrl());
-                processPostUrlForExcel(urlExecute.getNextUrl(), excelSheetName, excelOutputDirPath, excelFileName, recursiveIndex, filePostStartDate, jobId, uuidTempKey);
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "processPostUrlExcel execute for next URL :  {}", urlExecute.getNextUrl());
+                if(urlExecute.getNextUrl()!=null && !urlExecute.getNextUrl().isEmpty() && !urlExecute.getNextUrl().toLowerCase().equals("null")) {
+                    processPostUrlForExcel(urlExecute.getNextUrl(),
+                            excelSheetName,
+                            excelOutputDirPath,
+                            excelFileName,
+                            recursiveIndex,
+                            filePostStartDate,
+                            jobId,
+                            uuidTempKey);
+                }else {
+                    LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "processPostUrlExcel execute for next URL is null for recursive index {}", recursiveIndex);
+                    excelFileFinalizeForJob(excelOutputDirPath,
+                            excelFileName,
+                            recursiveIndex,
+                            filePostStartDate,
+                            jobId,
+                            uuidTempKey,
+                            filePostEndDate);
+                }
             }
         } catch (InterruptedException | IOException e) {
-            LOGGER.error(threadInfo(), e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
         }
     }
 
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
+    private void excelFileFinalizeForJob(Path excelOutputDirPath,
+                           String excelFileName,
+                           int recursiveIndex,
+                           String filePostStartDate,
+                           long jobId,
+                           String uuidTempKey,
+                           String filePostEndDate) throws InterruptedException
+    {
+        File tempExcelFile = excelOutputDirPath.resolve(excelFileName).toFile();
+        String newFileExcelName = excelFileName.replace(uuidTempKey,
+                filePostStartDate +"_"+ filePostEndDate +"_J"+ jobId);
+        File newExcelFile = excelOutputDirPath.resolve(newFileExcelName).toFile();
+
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Excel file created finalizing for Index {}", recursiveIndex);
+
+        // Retry rename because Windows file handles can briefly remain locked after workbook writes.
+        boolean renamed = false;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            if (tempExcelFile.renameTo(newExcelFile)) {
+                renamed = true;
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Renamed successfully Excel file name: {} on attempt {}",newExcelFile.getAbsolutePath(), attempt);
+                break;
+            }
+
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Rename failed for File Name : {} on attempt {}/3",newFileExcelName, attempt);
+
+            if (attempt < 3) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
+                            "Rename retry interrupted for File Name : {}",newFileExcelName);
+                    throw new RuntimeException("Rename retry interrupted for file: " + newFileExcelName, e);
+                }
+            }
+        }
+
+        if (!renamed) {
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Rename failed after 3 attempts for File Name : {}",newFileExcelName);
+            throw new RuntimeException("Rename failed after 3 attempts for file: " + newFileExcelName);
+        }
+
+        ExcelJob job = new ExcelJob(jobId, excelOutputDirPath.resolve(newFileExcelName));
+        job.setStatus(JobStatus.EXCEL_CREATED);
+        jobPersistenceService.saveJobStatus(job);
+        queues.excelReadyQueue().put(job);
+
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Added new ExcelJob in to ready queue : {}",job);
     }
 }

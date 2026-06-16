@@ -57,7 +57,10 @@ public class RetryService
         try {
             job.setErrorMessage(reason);
 
-            LOGGER.info(threadInfo(),"Retry or failed Job {} and reason", job.getJobId(), reason);
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Retry or failed Job {} and reason", job.getJobId(), reason);
 
             if (job.getRetryCount() < PipelineConfig.getMaxRetry()) {
                 job.incrementRetryCount();
@@ -69,13 +72,10 @@ public class RetryService
             }
 
         } catch (InterruptedException e) {
-            LOGGER.error(threadInfo(), e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
             Thread.currentThread().interrupt();
         }
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

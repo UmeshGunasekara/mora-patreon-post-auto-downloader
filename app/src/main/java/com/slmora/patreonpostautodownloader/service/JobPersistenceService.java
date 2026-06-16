@@ -96,7 +96,10 @@ public class JobPersistenceService
                 writer.newLine();
 
             } catch (Exception e) {
-                LOGGER.error(threadInfo(), "Failed to save status: {}", e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Failed to save status: {}", e);
             }
         }
     }
@@ -107,6 +110,7 @@ public class JobPersistenceService
                         + " | SUCCESS"
                         + " | JOB_ID=" + job.getJobId()
                         + " | EXCEL=" + excelFile(job)
+                        + " | DOCX=" + docxFile(job)
                         + " | DOCX_CREATED";
 
         synchronized (statusLock) {
@@ -118,7 +122,10 @@ public class JobPersistenceService
                 writer.newLine();
 
             } catch (Exception e) {
-                LOGGER.error(threadInfo(), "Failed to save success job: {}", e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Failed to save success job: {}", e);
             }
         }
     }
@@ -147,6 +154,9 @@ public class JobPersistenceService
                 writer.write("EXCEL_FILE=" + excelFile(job));
                 writer.newLine();
 
+                writer.write("DOCX_FILE=" + docxFile(job));
+                writer.newLine();
+
                 writer.write("RETRY_COUNT=" + job.getRetryCount());
                 writer.newLine();
 
@@ -171,7 +181,10 @@ public class JobPersistenceService
                 writer.newLine();
 
             } catch (Exception e) {
-                LOGGER.error(threadInfo(), "Failed to save failed job: {}", e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Failed to save failed job: {}", e);
             }
         }
     }
@@ -180,6 +193,12 @@ public class JobPersistenceService
         return job.getExcelFile() == null
                 ? ""
                 : job.getExcelFile().toString();
+    }
+
+    private String docxFile(ExcelJob job) {
+        return job.getDocxFile() == null
+                ? ""
+                : job.getDocxFile().toString();
     }
 
     private String safe(String value) {
@@ -194,10 +213,5 @@ public class JobPersistenceService
 
     private String timestamp() {
         return LocalDateTime.now().format(TS_FORMAT);
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

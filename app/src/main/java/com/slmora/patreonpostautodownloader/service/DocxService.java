@@ -96,9 +96,14 @@ public class DocxService
     {
 
         String finalDocxFileName = getFinalDocxFileName(job.getExcelFile().getFileName().toString(), docxFileNamePattern, tempDocxFileName);
-        LOGGER.info(threadInfo(),"finalDocxFileName is {}", finalDocxFileName);
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "finalDocxFileName is {}", finalDocxFileName);
 
         Path docxFilePath = docxOutputDirPath.resolve(finalDocxFileName);
+
+        job.setDocxFile(docxFilePath);
 
         writeOnDocxFromExcel(job.getExcelFile().toString(), docxFilePath.toString(), excelSheetName);
     }
@@ -175,7 +180,9 @@ public class DocxService
                                     280);
                             wordMLPackage.getMainDocumentPart().addObject(imageParagraph);
                         } catch (Exception ex) {
-                            LOGGER.error(threadInfo(), ex);
+                            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                            Thread.currentThread().threadId(),
+                                            Thread.currentThread().getStackTrace()), ex);
                             wordMLPackage.getMainDocumentPart().addObject(
                                     createParagraph("[Image download failed] " + image)
                             );
@@ -308,13 +315,18 @@ public class DocxService
     }
 
     private byte[] downloadImage(HttpClient client, String imageUrl) throws Exception {
-        URI uri = URI.create(imageUrl.trim());
-        HttpRequest request = HttpRequest.newBuilder(uri)
-                .timeout(REQUEST_TIMEOUT)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
-                .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9")
+//        URI uri = URI.create(imageUrl.trim());
+//        HttpRequest request = HttpRequest.newBuilder(uri)
+//                .timeout(REQUEST_TIMEOUT)
+//                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+//                .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+//                .header("Accept-Language", "en-US,en;q=0.9")
+//                .GET()
+//                .build();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(imageUrl))
                 .GET()
+                .header("User-Agent", "Mozilla/5.0")
                 .build();
 
         HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
@@ -372,7 +384,9 @@ public class DocxService
 
             return sb.toString().trim();
         } catch (Exception e) {
-            LOGGER.error(threadInfo(), e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
             return contentJsonString;
         }
     }
@@ -403,8 +417,4 @@ public class DocxService
         }
     }
 
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
-    }
 }

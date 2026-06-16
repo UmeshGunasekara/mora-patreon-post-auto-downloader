@@ -85,18 +85,26 @@ public class ProcessRetry
                 retryJob(job);
 
             } catch (InterruptedException e) {
-                LOGGER.error(threadInfo(), e);
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()), e);
             }
         }
 
         state.setProcessRetryFinished(true);
 
-        LOGGER.info(threadInfo(),"Process Retry Finished");
+        LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Process Retry Finished");
     }
 
     private void retryJob(ExcelJob job) {
         try {
-            LOGGER.info(threadInfo(),"Start ProcessRetry for excel Job {}", job);
+            LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()),
+                    "Start ProcessRetry for excel Job {}", job);
 
             job.setStatus(JobStatus.IMAGE_DOWNLOAD_IN_PROGRESS);
 
@@ -127,12 +135,17 @@ public class ProcessRetry
             job.getImageRecords()
                     .stream()
                     .filter(imageRecord -> imageRecord.getDownloadStatus() != DownloadStatus.SUCCESS)
-                    .forEach(imageRecord -> LOGGER.warn(threadInfo(),
+                    .forEach(imageRecord -> LOGGER.warn(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                    Thread.currentThread().threadId(),
+                                    Thread.currentThread().getStackTrace()),
                             "Image download failed for Job {}, Image URL: {}",job.getJobId(),imageRecord.getImageUrl()
                     ));
 
             if (!hasJobSuccess) {
-                LOGGER.error(threadInfo(),"Retry success. There are some images has not been downloaded successfully with full check");
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Retry success. There are some images has not been downloaded successfully with full check");
             }
 
             boolean hasFails = job.getImageRecords()
@@ -141,20 +154,20 @@ public class ProcessRetry
 
             if(hasFails){
                 retryService.sendToRetryOrFailed(job, "Retry failed. There are some images has not been downloaded successfully");
-                LOGGER.error(threadInfo(),"Retry failed. There are some images has not been downloaded successfully");
+                LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Retry failed. There are some images has not been downloaded successfully");
             }else {
                 job.setStatus(JobStatus.IMAGES_DOWNLOADED);
                 queues.docxReadyQueue().put(job);
             }
 
         } catch (Exception e) {
-            LOGGER.error(threadInfo(), e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
             retryService.sendToRetryOrFailed(job, e.getMessage());
         }
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

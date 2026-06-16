@@ -74,7 +74,10 @@ public class PatreonPostDownloadPipelineController
     public void execute() throws IOException
     {
 
-        LOGGER.debug(threadInfo(),"Load Configuration \n {}", PipelineConfig.getToString());
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Load Configuration \n {}", PipelineConfig.getToString());
 
         // Ensure every downstream process can write its artifacts before the pipeline starts.
         Files.createDirectories(PipelineConfig.getExcelOutputDirPath());
@@ -82,12 +85,18 @@ public class PatreonPostDownloadPipelineController
         Files.createDirectories(PipelineConfig.getDocxOutputDirPath());
         Files.createDirectories(PipelineConfig.getFailedOutputDirPath());
 
-        LOGGER.debug(threadInfo(),"Created output directories if not exist");
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Created output directories if not exist");
 
         PipelineQueues queues = new PipelineQueues();
         PipelineState state = new PipelineState();
 
-        LOGGER.debug(threadInfo(),"Configuration, Queues and State initialized");
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Configuration, Queues and State initialized");
 
         // Services are constructed here to keep process classes focused on stage-specific work.
         UrlExecutionService urlExecutionService = new UrlExecutionService();
@@ -98,7 +107,10 @@ public class PatreonPostDownloadPipelineController
         JobPersistenceService jobPersistenceService = new JobPersistenceService();
         RetryService retryService = new RetryService(queues);
 
-        LOGGER.debug(threadInfo(),"Service initialized");
+        LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                        Thread.currentThread().threadId(),
+                        Thread.currentThread().getStackTrace()),
+                "Service initialized");
 
         ProcessExcelProducer excelProducer =
                 new ProcessExcelProducer(
@@ -152,10 +164,5 @@ public class PatreonPostDownloadPipelineController
                 );
 
         pipeline.start();
-    }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
     }
 }

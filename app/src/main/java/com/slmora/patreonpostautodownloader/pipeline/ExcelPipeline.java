@@ -78,9 +78,4 @@ public class ExcelPipeline
 
         executor.shutdown();
     }
-
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
-    }
 }

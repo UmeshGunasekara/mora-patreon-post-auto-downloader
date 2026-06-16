@@ -101,7 +101,10 @@ public class ExcelService
 
         try {
             if (excelFile.exists()) {
-                LOGGER.info(threadInfo(),"Excel file exists in {}",excelOutputFilePath.toString());
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Excel file exists in {}",excelOutputFilePath.toString());
 
                 try (FileInputStream fis = new FileInputStream(excelFile)) {
                     workbook = WorkbookFactory.create(fis);
@@ -114,7 +117,10 @@ public class ExcelService
                 }
 
             } else {
-                LOGGER.info(threadInfo(),"Excel file not exists in {}",excelOutputFilePath.toString());
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Excel file not exists in {}",excelOutputFilePath.toString());
 
                 workbook = new XSSFWorkbook();
                 sheet = workbook.createSheet(excelSheetName);
@@ -148,7 +154,10 @@ public class ExcelService
 
             try (FileOutputStream fos = new FileOutputStream(excelFile)) {
                 workbook.write(fos);
-                LOGGER.info(threadInfo(),"Excel file updated in {}",excelOutputFilePath.toString());
+                LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
+                        "Excel file updated in {}",excelOutputFilePath.toString());
             }
         }finally {
             if(workbook != null){
@@ -235,7 +244,9 @@ public class ExcelService
                 DateParts dateParts = splitPublishedAt(publishedAt);
                 String time = dateParts.getTime().replace(":", "-");
 
-                LOGGER.debug(threadInfo(),
+                LOGGER.debug(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                                Thread.currentThread().threadId(),
+                                Thread.currentThread().getStackTrace()),
                         "Excel raw information \n\tid : {} \n\tpublished_at : {} \n\ttitle : {} \n\tlarge_url : {} \n\tdateParts : {} \n\ttime : {}",
                         id,publishedAt,title,imageUrl,dateParts.getDate(),time);
 
@@ -261,7 +272,9 @@ public class ExcelService
 
             return items;
         } catch (IOException e) {
-            LOGGER.error(threadInfo(), e);
+            LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
+                            Thread.currentThread().threadId(),
+                            Thread.currentThread().getStackTrace()), e);
             throw new RuntimeException(e);
         }
     }
@@ -337,8 +350,4 @@ public class ExcelService
         return cleaned.trim().replaceAll("\\s+", "-");
     }
 
-    private static MoraLoggerThreadInfo threadInfo() {
-        Thread t = Thread.currentThread();
-        return new MoraLoggerThreadInfo(t.getName(), t.threadId(), t.getStackTrace());
-    }
 }
