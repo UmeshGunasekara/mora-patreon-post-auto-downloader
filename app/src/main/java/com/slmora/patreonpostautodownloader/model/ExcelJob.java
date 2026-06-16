@@ -15,29 +15,42 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Represents an Excel batch moving through the Patreon post download pipeline.
+ * The {@code ExcelJob} class is created for carrying one generated Excel batch
+ * through the Patreon post download pipeline.
  * <p>
- * An {@code ExcelJob} identifies the generated Excel workbook, tracks image
- * records extracted from that workbook, and carries status, retry, and error
- * details between the producer, image download, retry, DOCX, and failed-job
- * monitor stages. Lombok {@link Data} generates the standard getters, setters
- * for mutable fields, {@code equals}, {@code hashCode}, and required accessor
- * methods for this pipeline DTO.
+ * A job starts after the Excel producer finalizes a workbook. Later stages use
+ * the same job object to store image records, image download state, retry
+ * counts, generated DOCX path, terminal status, and error details while the job
+ * moves across the Excel-ready, retry, DOCX-ready, and failed queues.
  * </p>
  *
- * <p>Methods:</p>
+ * <h4>Key Features</h4>
  * <ul>
- *     <li>{@link #ExcelJob(long, Path)} - creates a job for a generated Excel file.</li>
- *     <li>{@link #incrementRetryCount()} - increments the retry attempt counter.</li>
- *     <li>{@link #toString()} - returns a log-friendly job summary.</li>
- *     <li>Lombok-generated accessors and mutators from {@link Data}.</li>
+ *     <li>Stores the unique job identifier and finalized Excel workbook path.</li>
+ *     <li>Maintains a synchronized image-record list populated from the Excel workbook.</li>
+ *     <li>Tracks volatile status, retry count, DOCX path, and error details shared between process threads.</li>
+ *     <li>Provides a concise {@link ExcelJob#toString()} for queue and job-status logging.</li>
  * </ul>
  *
- * <p>Key responsibilities:</p>
+ * <h4>Codes</h4>
+ * 1 - {@link ImageRecord}<br>
+ * 2 - {@link JobStatus}<br>
+ * 3 - {@link DownloadStatus}<br>
+ *
+ * <h4>Methods</h4>
  * <ul>
- *     <li>Keep the unique job identifier and Excel file path together.</li>
- *     <li>Store image records associated with the Excel batch.</li>
- *     <li>Expose status, retry count, and error message for pipeline coordination.</li>
+ *     <li>{@link ExcelJob#ExcelJob(long, Path)}</li>
+ *     <li>{@link ExcelJob#incrementRetryCount()}</li>
+ *     <li>{@link ExcelJob#toString()}</li>
+ *     <li>Lombok-generated accessors and mutators from {@link Data}</li>
+ * </ul>
+ *
+ * <p>
+ * <h4>Notes</h4>
+ * <ul>
+ *     <li>The image list is synchronized because image processing and retry paths can inspect and mutate job image records across pipeline stages.</li>
+ *     <li>Volatile fields provide visibility for job state exchanged between producer-worker threads.</li>
+ *     <li>This model does not enforce legal status transitions; process and retry services own that workflow logic.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -54,7 +67,8 @@ import java.util.List;
 public class ExcelJob
 {
     /**
-     * Unique identifier assigned by the Excel producer.
+     * Unique identifier assigned by the Excel producer when the batch workbook
+     * is finalized.
      */
     private final long jobId;
 
@@ -63,6 +77,9 @@ public class ExcelJob
      */
     private final Path excelFile;
 
+    /**
+     * Path to the generated DOCX report after document creation succeeds.
+     */
     private volatile Path docxFile;
 
     /**
@@ -72,7 +89,7 @@ public class ExcelJob
             Collections.synchronizedList(new ArrayList<>());
 
     /**
-     * Current lifecycle status for this job.
+     * Current lifecycle status for this job, updated by process stages.
      */
     private volatile JobStatus status;
 
@@ -87,10 +104,26 @@ public class ExcelJob
     private volatile String errorMessage;
 
     /**
-     * Creates a job for a generated Excel workbook.
+     * <h3>Create Excel pipeline job</h3>
+     * Creates a job for a finalized Excel workbook produced by the Excel
+     * producer stage.
+     * <p>
+     * The constructor captures immutable job identity values. Mutable processing
+     * fields such as status, image records, retry count, DOCX path, and error
+     * message are populated as the job moves through later pipeline stages.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Stores the unique job identifier used in logs and persistence output.</li>
+     *     <li>Stores the finalized Excel file path used by image extraction and DOCX generation.</li>
+     *     <li>Leaves status and retry metadata unset until process stages update them.</li>
+     * </ul>
      *
      * @param jobId unique job identifier assigned by the producer
      * @param excelFile path to the finalized Excel workbook
+     *
+     * @since 1.0
      */
     public ExcelJob(long jobId, Path excelFile) {
         this.jobId = jobId;
@@ -98,16 +131,41 @@ public class ExcelJob
     }
 
     /**
-     * Increments the retry counter after a failed processing attempt.
+     * <h3>Increment retry count</h3>
+     * Increments the retry counter after a failed image processing attempt.
+     * <p>
+     * Retry services use this value when deciding whether the job should return
+     * to retry processing or move to failed-job handling.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Adds one to the current retry count.</li>
+     *     <li>Does not validate the configured maximum retry limit.</li>
+     * </ul>
+     *
+     * @implNote The counter field is volatile for visibility, but this increment
+     * operation is not atomic across multiple concurrent callers.
+     * @since 1.0
      */
     public void incrementRetryCount() {
         this.retryCount++;
     }
 
     /**
-     * Builds a concise representation suitable for logs and queue diagnostics.
+     * <h3>Create job log summary</h3>
+     * Builds a concise representation suitable for logs, queue diagnostics, and
+     * job-status output.
+     * <p>
+     * The summary intentionally excludes the image-record list to avoid noisy log
+     * output when a job contains many downloaded image entries.
+     * </p>
      *
      * @return formatted job summary including identifier, file, status, retry count, and error message
+     *
+     * @implNote Keep this output compact because jobs are logged during queue
+     * handoff and failure handling.
+     * @since 1.0
      */
     public String toString() {
         return "ExcelJob{" +

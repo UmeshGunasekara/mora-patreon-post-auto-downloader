@@ -36,28 +36,44 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Produces Excel batches from Patreon post API responses.
+ * The {@code ProcessExcelProducer} class is created for producing Excel batch
+ * jobs from Patreon post API responses.
  * <p>
- * This process reads the initial Patreon API URL from configuration, retrieves
- * paginated post data through {@link UrlExecutionService}, appends the records
- * into a temporary Excel workbook through {@link ExcelService}, finalizes each
- * batch file after the configured page window, and places the resulting
- * {@link ExcelJob} on the Excel-ready queue for image processing.
+ * This process reads seed Patreon API URLs from the configured input file,
+ * retrieves paginated post data through {@link UrlExecutionService}, appends
+ * records into temporary Excel workbooks through {@link ExcelService}, finalizes
+ * each batch file after the configured page window, and places the resulting
+ * {@link ExcelJob} on {@link PipelineQueues#excelReadyQueue()} for image
+ * processing.
  * </p>
  *
- * <p>Methods:</p>
+ * <h4>Key Features</h4>
  * <ul>
- *     <li>{@link #ProcessExcelProducer(PipelineConfig, PipelineQueues, PipelineState, UrlExecutionService, ExcelService, JobPersistenceService)} - creates the producer with its shared pipeline dependencies.</li>
- *     <li>{@link #start()} - starts URL ingestion and marks the producer as finished when complete.</li>
- *     <li>{@link #processPostUrlForExcel(String, String, Path, String, int, String, long)} - recursively fetches post pages, writes Excel rows, finalizes batch files, and enqueues jobs.</li>
+ *     <li>Reads and sanitizes seed Patreon API URLs from {@link PipelineConfig#getUrlInputPath()}.</li>
+ *     <li>Processes multiple seed URLs concurrently using the configured Excel producer thread count.</li>
+ *     <li>Writes paginated Patreon post records into temporary Excel files and finalizes them every 30 pages.</li>
+ *     <li>Persists initial job status and publishes completed Excel jobs for image downloading.</li>
  * </ul>
  *
- * <p>Key responsibilities:</p>
+ * <h4>Codes</h4>
+ * 1 - {@link PipelineConfig}<br>
+ * 2 - {@link PipelineQueues}<br>
+ * 3 - {@link PipelineState}<br>
+ * 4 - {@link UrlExecutionService}<br>
+ * 5 - {@link ExcelService}<br>
+ *
+ * <h4>Methods</h4>
  * <ul>
- *     <li>Read the seed Patreon API URL from {@link PipelineConfig#urlInputPath}.</li>
- *     <li>Create and maintain temporary Excel files for downloaded post records.</li>
- *     <li>Finalize each Excel batch with date and job identifiers in the file name.</li>
- *     <li>Persist Excel job status and publish completed jobs to {@link PipelineQueues#excelReadyQueue()}.</li>
+ *     <li>{@link ProcessExcelProducer#ProcessExcelProducer(PipelineQueues, PipelineState, UrlExecutionService, ExcelService, JobPersistenceService)}</li>
+ *     <li>{@link ProcessExcelProducer#start()}</li>
+ * </ul>
+ *
+ * <p>
+ * <h4>Notes</h4>
+ * <ul>
+ *     <li>The class uses manual recursion for Patreon pagination and batch rollover.</li>
+ *     <li>Temporary Excel file names use a UUID key until the batch is finalized with post date range and job id.</li>
+ *     <li>The producer always marks {@link PipelineState#setProcessExcelProducerFinished(boolean)} in the {@code finally} block of {@link ProcessExcelProducer#start()}.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -72,27 +88,75 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ProcessExcelProducer
 {
+    /**
+     * Class-scoped logger used for producer lifecycle, URL processing, file
+     * finalization, and queue publication diagnostics.
+     */
     private final static MoraLogger LOGGER = MoraLogger.getLogger(ProcessExcelProducer.class);
 
+    /**
+     * Shared pipeline queues used to publish finalized Excel jobs.
+     */
     private final PipelineQueues queues;
+
+    /**
+     * Shared pipeline state used to signal that this producer has no more Excel
+     * jobs to publish.
+     */
     private final PipelineState state;
+
+    /**
+     * Service used to execute Patreon API URLs and parse post records.
+     */
     private final UrlExecutionService urlExecutionService;
+
+    /**
+     * Service used to append Patreon post records into Excel workbooks.
+     */
     private final ExcelService excelService;
+
+    /**
+     * Service used to persist job status when an Excel batch is finalized.
+     */
     private final JobPersistenceService jobPersistenceService;
+
+    /**
+     * Process-level executor used to handle multiple configured seed URLs in
+     * parallel.
+     */
     private final ExecutorService processExcelPool;
 
+    /**
+     * Monotonic job id generator used for Excel batches created by this producer
+     * instance.
+     */
     private final AtomicLong jobIdGenerator = new AtomicLong(1);
 
     /**
-     * Creates an Excel producer with the dependencies required for URL retrieval,
-     * workbook creation, status persistence, and queue coordination.
+     * <h3>Create Excel producer process</h3>
+     * Creates an Excel producer with the dependencies required for Patreon URL
+     * retrieval, workbook creation, status persistence, and queue coordination.
+     * <p>
+     * The constructor also creates a fixed-size executor whose size is resolved
+     * from {@link PipelineConfig#getProcessExcelThreads()}.
+     * </p>
      *
-     * @param config pipeline configuration containing input and output paths
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Stores shared queues and state used by the producer-worker pipeline.</li>
+     *     <li>Stores services for URL execution, Excel writing, and job persistence.</li>
+     *     <li>Creates the process executor used by {@link ProcessExcelProducer#start()}.</li>
+     * </ul>
+     *
      * @param queues shared queues used to publish completed Excel jobs
      * @param state shared pipeline state used to signal producer completion
      * @param urlExecutionService service used to execute Patreon API requests
      * @param excelService service used to write post records into Excel workbooks
      * @param jobPersistenceService service used to persist job status updates
+     *
+     * @apiNote All process instances in one pipeline execution should share the
+     * same {@link PipelineQueues} and {@link PipelineState}.
+     * @since 1.0
      */
     public ProcessExcelProducer(
             PipelineQueues queues,
@@ -110,12 +174,41 @@ public class ProcessExcelProducer
     }
 
     /**
-     * Starts the Excel producer process.
+     * <h3>Start Excel production</h3>
+     * Starts URL ingestion and Excel batch production for every configured seed
+     * URL.
      * <p>
-     * The method reads the initial URL, prepares the Excel output directory,
-     * starts recursive post-page processing, and always marks this producer as
-     * finished before returning.
+     * The method reads seed URLs from {@link PipelineConfig#getUrlInputPath()},
+     * removes blank entries, submits one task per seed URL to the producer pool,
+     * waits for those tasks to finish, and always marks this producer as finished
+     * before returning.
      * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Loads all lines from the configured URL input file using UTF-8.</li>
+     *     <li>Trims blank entries and stops early when no valid seed URL exists.</li>
+     *     <li>Assigns an initial job id for each seed URL and starts recursive page processing.</li>
+     *     <li>Shuts down the producer executor and waits up to 24 hours for completion.</li>
+     *     <li>Sets the Excel producer finished flag in {@link PipelineState} even when setup fails.</li>
+     * </ul>
+     *
+     * <p><b>Example:</b></p>
+     * <pre>{@code
+     * ProcessExcelProducer producer = new ProcessExcelProducer(
+     *         queues,
+     *         state,
+     *         urlExecutionService,
+     *         excelService,
+     *         jobPersistenceService
+     * );
+     * producer.start();
+     * }</pre>
+     *
+     * @implNote The producer waits for submitted seed URL tasks before setting
+     * the finished flag so downstream consumers can combine this flag with queue
+     * emptiness checks.
+     * @since 1.0
      */
     public void start() {
         try {
@@ -136,6 +229,7 @@ public class ProcessExcelProducer
 
             for (String initUrl : sanitizedInitUrlList) {
                 final long initialJobId = jobIdGenerator.getAndIncrement();
+                // Each seed URL owns its first job id; recursive pagination may allocate later ids for batch rollover.
                 processExcelPool.submit(() -> {
                     try {
                         processPostUrlForExcel(
@@ -186,12 +280,24 @@ public class ProcessExcelProducer
     }
 
     /**
-     * Processes Patreon post pages into Excel batches.
+     * <h3>Process Patreon pages into Excel batches</h3>
+     * Processes Patreon post pages into temporary Excel files and finalizes
+     * completed batches as pipeline jobs.
      * <p>
-     * Each invocation fetches the current page, writes records to the temporary
-     * workbook, finalizes the workbook when the batch window is reached, enqueues
-     * the completed job, and then continues with the next pagination URL.
+     * Each invocation fetches the current page, writes records to the active
+     * temporary workbook, finalizes the workbook when the 30-page batch window is
+     * reached, enqueues the completed job, and continues with the next Patreon
+     * pagination URL when present.
      * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Retries the current URL execution until {@link UrlExecutionService#executeUrl(String, int)} returns records.</li>
+     *     <li>Uses the first and last post publication dates to build the finalized Excel file name.</li>
+     *     <li>Creates a UUID-backed temporary file name for the active batch.</li>
+     *     <li>Writes parsed post records to Excel through {@link ExcelService#createExcelFromRecords(List, Path, String)}.</li>
+     *     <li>Finalizes and queues a job after 30 pages or when Patreon pagination ends.</li>
+     * </ul>
      *
      * @param initUrl current Patreon API URL to execute
      * @param excelSheetName Excel sheet name for post records
@@ -200,12 +306,18 @@ public class ProcessExcelProducer
      * @param recursiveIndex current page index inside the active Excel batch
      * @param filePostStartDate first post date for the active Excel batch
      * @param jobId job identifier assigned to the active Excel batch
+     * @param uuidTempKey temporary UUID key embedded in the active Excel file name
+     *
+     * @implNote The method uses recursion for pagination, carrying batch state
+     * through method parameters instead of storing it on the producer instance.
+     * @since 1.0
      */
     private void processPostUrlForExcel(String initUrl, String excelSheetName, Path excelOutputDirPath, String excelFileName, int recursiveIndex, String filePostStartDate, long jobId, String uuidTempKey)
     {
         try {
             Optional<URLExecute> records;
             do{
+                // Empty Optional signals a recoverable URL execution failure, so this producer retries the same page.
                 records = urlExecutionService.executeUrl(initUrl, recursiveIndex);
             }while(records.isEmpty());
 
@@ -234,7 +346,6 @@ public class ProcessExcelProducer
                 excelFileName = excelFileName.replace("temp",uuidTempKey);
             }
 
-
             Path excelOutputFilePath = excelOutputDirPath.resolve(excelFileName);
 
             excelService.createExcelFromRecords(allPosts,  excelOutputFilePath, excelSheetName);
@@ -246,6 +357,7 @@ public class ProcessExcelProducer
 
             if(recursiveIndex<=30) {
                 if(recursiveIndex==30){
+                    // Finalize at 30 pages to keep downstream Excel, image, and DOCX batches at a manageable size.
                     excelFileFinalizeForJob(excelOutputDirPath,
                             excelFileName,
                             recursiveIndex,
@@ -302,6 +414,7 @@ public class ProcessExcelProducer
                                     Thread.currentThread().threadId(),
                                     Thread.currentThread().getStackTrace()),
                             "processPostUrlExcel execute for next URL is null for recursive index {}", recursiveIndex);
+                    // Patreon has no next page, so the partially filled batch still needs to become a job.
                     excelFileFinalizeForJob(excelOutputDirPath,
                             excelFileName,
                             recursiveIndex,
@@ -318,6 +431,36 @@ public class ProcessExcelProducer
         }
     }
 
+    /**
+     * <h3>Finalize Excel file for job</h3>
+     * Renames the active temporary Excel file into its final job file name and
+     * publishes the created {@link ExcelJob}.
+     * <p>
+     * The final file name replaces the temporary UUID key with the post date
+     * range and job id, then the job is marked as {@link JobStatus#EXCEL_CREATED},
+     * persisted, and placed on {@link PipelineQueues#excelReadyQueue()}.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Builds the final Excel file name from start date, end date, and job id.</li>
+     *     <li>Retries the rename up to three times to handle short-lived file locks.</li>
+     *     <li>Creates and persists an {@link ExcelJob} after the rename succeeds.</li>
+     *     <li>Publishes the job to the Excel-ready queue for image download processing.</li>
+     * </ul>
+     *
+     * @param excelOutputDirPath directory containing the temporary and final Excel files
+     * @param excelFileName active temporary Excel file name
+     * @param recursiveIndex current page index used for diagnostic logging
+     * @param filePostStartDate first post date included in the finalized Excel file
+     * @param jobId job identifier assigned to the finalized batch
+     * @param uuidTempKey temporary UUID key to replace in the file name
+     * @param filePostEndDate last post date included in the finalized Excel file
+     *
+     * @throws InterruptedException when queue publication is interrupted
+     * @throws RuntimeException when the temporary file cannot be renamed after retry attempts
+     * @since 1.0
+     */
     private void excelFileFinalizeForJob(Path excelOutputDirPath,
                            String excelFileName,
                            int recursiveIndex,

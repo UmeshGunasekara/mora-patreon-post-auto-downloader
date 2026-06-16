@@ -30,26 +30,40 @@ import java.io.IOException;
 import java.nio.file.Files;
 
 /**
- * Coordinates startup for the Patreon post download pipeline.
+ * The {@code PatreonPostDownloadPipelineController} class is created for wiring
+ * and starting the complete Patreon post download pipeline.
  * <p>
- * This controller is responsible for constructing the pipeline configuration,
- * preparing required output directories, wiring queue and state objects,
- * creating the services used by each process stage, and starting the
- * {@link ExcelPipeline}. It keeps the application entry point lightweight while
- * preserving the project's manual orchestration style.
+ * This controller is the application-level composition point. It prepares the
+ * configured output directories, creates shared {@link PipelineQueues} and
+ * {@link PipelineState}, constructs the services used by each stage, wires the
+ * process objects, and delegates concurrent execution to {@link ExcelPipeline}.
  * </p>
  *
- * <p>Methods:</p>
+ * <h4>Key Features</h4>
  * <ul>
- *     <li>{@link #execute()} - initializes and starts the Patreon post download pipeline.</li>
+ *     <li>Creates required output directories before any producer or worker starts writing files.</li>
+ *     <li>Builds one shared queue set and one shared state object for the producer-worker workflow.</li>
+ *     <li>Manually wires URL execution, Excel, image download, retry, DOCX, cleanup, and persistence services.</li>
+ *     <li>Starts Excel production, image download, retry, DOCX production, and failed-job monitoring through {@link ExcelPipeline}.</li>
  * </ul>
  *
- * <p>Key responsibilities:</p>
+ * <h4>Codes</h4>
+ * 1 - {@link PipelineConfig}<br>
+ * 2 - {@link PipelineQueues}<br>
+ * 3 - {@link PipelineState}<br>
+ * 4 - {@link ExcelPipeline}<br>
+ *
+ * <h4>Methods</h4>
  * <ul>
- *     <li>Load pipeline configuration and ensure required output directories exist.</li>
- *     <li>Create shared pipeline queues and execution state.</li>
- *     <li>Wire producer, worker, retry, DOCX, and failed-job monitor processes.</li>
- *     <li>Start the configured {@link ExcelPipeline}.</li>
+ *     <li>{@link PatreonPostDownloadPipelineController#execute()}</li>
+ * </ul>
+ *
+ * <p>
+ * <h4>Notes</h4>
+ * <ul>
+ *     <li>This class preserves the project's manual wiring style and does not introduce a dependency injection framework.</li>
+ *     <li>Runtime behavior depends on values resolved by {@link PipelineConfig}, including directories, queue sizes, worker counts, retry limits, and Patreon authentication.</li>
+ *     <li>The started pipeline owns process execution and executor shutdown after this controller delegates to {@link ExcelPipeline#start()}.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -64,12 +78,50 @@ import java.nio.file.Files;
  */
 public class PatreonPostDownloadPipelineController
 {
+    /**
+     * Class-scoped logger used for controller initialization, configuration, and
+     * service wiring diagnostics.
+     */
     private final static MoraLogger LOGGER = MoraLogger.getLogger(PatreonPostDownloadPipelineController.class);
 
     /**
-     * Initializes all pipeline dependencies and starts the producer-worker workflow.
+     * <h3>Start Patreon post download pipeline</h3>
+     * Initializes all pipeline dependencies and starts the producer-worker
+     * workflow.
+     * <p>
+     * This method is called by the application entry point after the JVM starts.
+     * It creates the runtime directory structure, shared coordination objects,
+     * stage services, process instances, and the {@link ExcelPipeline} that runs
+     * those stages concurrently.
+     * </p>
      *
-     * @throws IOException if required output directories cannot be created
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Logs the masked {@link PipelineConfig} values before pipeline setup begins.</li>
+     *     <li>Creates Excel, image, DOCX, and failed-output directories if they do not already exist.</li>
+     *     <li>Creates {@link PipelineQueues} and {@link PipelineState} for cross-stage job handoff and completion signaling.</li>
+     *     <li>Constructs services used by the URL producer, Excel writer/reader, image downloader, retry handler, DOCX generator, cleanup handler, and job persistence layer.</li>
+     *     <li>Wires all process stages and starts them through {@link ExcelPipeline#start()}.</li>
+     * </ul>
+     *
+     * <p><b>Example:</b></p>
+     * <pre>{@code
+     * PatreonPostDownloadPipelineController controller = new PatreonPostDownloadPipelineController();
+     * controller.execute();
+     * }</pre>
+     *
+     * @throws IOException when one of the configured output directories cannot be created
+     *
+     * @implNote Service and process construction stays in this controller so the
+     * individual process classes remain focused on stage-specific work instead
+     * of application composition.
+     * @apiNote Ensure required properties and environment values are available
+     * before calling this method. The method starts the pipeline but does not
+     * perform application-level retry for setup failures.
+     * @since 1.0
+     *
+     * @see ExcelPipeline#start()
+     * @see PipelineConfig
      */
     public void execute() throws IOException
     {
@@ -163,6 +215,7 @@ public class PatreonPostDownloadPipelineController
                         failedJobMonitor
                 );
 
+        // ExcelPipeline owns concurrent stage submission and shuts down its executor after all stages are submitted.
         pipeline.start();
     }
 }

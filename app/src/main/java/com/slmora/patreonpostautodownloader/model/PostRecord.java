@@ -10,25 +10,37 @@ package com.slmora.patreonpostautodownloader.model;
 import lombok.Data;
 
 /**
- * Represents a Patreon post extracted from an API response.
+ * The {@code PostRecord} class is created for carrying Patreon post data
+ * extracted from an API response.
  * <p>
- * This DTO carries the post metadata, textual content, post URL, and image
- * URLs that are written to Excel and later used for image downloads and DOCX
- * report generation. Lombok {@link Data} generates the accessors, mutators,
- * {@code equals}, {@code hashCode}, and {@code toString} methods.
+ * The URL execution service maps Patreon JSON into this DTO. The Excel service
+ * writes these values into the configured workbook columns, and later pipeline
+ * stages use the stored content and image URLs for downloads and DOCX report
+ * generation.
  * </p>
  *
- * <p>Methods:</p>
+ * <h4>Key Features</h4>
  * <ul>
- *     <li>Lombok-generated getters and setters for all post fields.</li>
- *     <li>Lombok-generated {@code equals}, {@code hashCode}, and {@code toString} methods.</li>
+ *     <li>Stores Patreon identity, publication timestamp, title, teaser text, content JSON, and comment count.</li>
+ *     <li>Stores the public Patreon post URL used for report references.</li>
+ *     <li>Stores large and thumbnail image URLs used by downstream image extraction and download stages.</li>
+ *     <li>Uses Lombok {@link Data} to provide standard accessors, mutators, {@code equals}, {@code hashCode}, and {@code toString} methods.</li>
  * </ul>
  *
- * <p>Key responsibilities:</p>
+ * <h4>Codes</h4>
+ * 1 - {@link URLExecute}<br>
+ *
+ * <h4>Methods</h4>
  * <ul>
- *     <li>Store Patreon post identity, title, publication date, and comment count.</li>
- *     <li>Store teaser and structured content used for report output.</li>
- *     <li>Store Patreon and image URLs used by downstream pipeline stages.</li>
+ *     <li>Lombok-generated getters and setters for all post fields</li>
+ *     <li>Lombok-generated {@code equals}, {@code hashCode}, and {@code toString}</li>
+ * </ul>
+ *
+ * <p>
+ * <h4>Notes</h4>
+ * <ul>
+ *     <li>This model preserves string values as received or normalized by the URL parsing service; it does not validate Patreon payload fields.</li>
+ *     <li>The Excel column contract depends on several fields in this DTO, including {@code id}, {@code publishedAt}, {@code title}, {@code contentJsonString}, {@code largeUrl}, and {@code thumbUrl}.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -45,12 +57,13 @@ import lombok.Data;
 public class PostRecord
 {
     /**
-     * Patreon post identifier.
+     * Patreon post identifier mapped from the response {@code id} field.
      */
     private String id;
 
     /**
-     * Publication timestamp returned by the Patreon API.
+     * Publication timestamp returned by the Patreon API, usually in an ISO
+     * offset date-time format.
      */
     private String publishedAt;
 
@@ -60,12 +73,13 @@ public class PostRecord
     private String title;
 
     /**
-     * Cleaned teaser text extracted from the post payload.
+     * Cleaned teaser text extracted from the post payload attributes.
      */
     private String cleanedTeaserText;
 
     /**
-     * Raw or serialized content JSON used for DOCX text extraction.
+     * Raw or serialized content JSON string used by DOCX generation to extract
+     * report text.
      */
     private String contentJsonString;
 
@@ -80,12 +94,14 @@ public class PostRecord
     private String patreonUrl;
 
     /**
-     * Large image URL associated with the post.
+     * Large image URL associated with the post, when Patreon exposes one in the
+     * response payload.
      */
     private String largeUrl;
 
     /**
-     * Thumbnail image URL associated with the post.
+     * Thumbnail image URL associated with the post, when Patreon exposes one in
+     * the response payload.
      */
     private String thumbUrl;
 }

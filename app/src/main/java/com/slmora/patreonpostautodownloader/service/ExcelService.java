@@ -39,21 +39,40 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The {@code ExcelService} Class created for
+ * The {@code ExcelService} class is created for writing Patreon post records to
+ * Excel workbooks and reading image download records back from those workbooks.
+ * <p>
+ * The Excel producer uses this service to append paginated {@link PostRecord}
+ * values into batch workbooks. The image download worker later uses the same
+ * workbook column contract to extract {@link ImageRecord} values from the
+ * {@code large_url} column.
+ * </p>
+ *
  * <h4>Key Features</h4>
  * <ul>
- *      <li>...</li>
+ *     <li>Creates new Excel workbooks with the pipeline post column structure.</li>
+ *     <li>Appends additional post rows to existing workbooks during batch pagination.</li>
+ *     <li>Reads image URLs from Excel rows and turns them into image download records.</li>
+ *     <li>Builds deterministic image names from publication date, time, post id, title, and image index.</li>
  * </ul>
+ *
  * <h4>Codes</h4>
- * 1 - {@link }<br>
+ * 1 - {@link PostRecord}<br>
+ * 2 - {@link ImageRecord}<br>
+ * 3 - {@link DateParts}<br>
+ *
  * <h4>Methods</h4>
  * <ul>
- *      <li>{@link }</li>
+ *     <li>{@link ExcelService#createExcelFromRecords(List, Path, String)}</li>
+ *     <li>{@link ExcelService#readImageRecords(Path, String)}</li>
  * </ul>
+ *
  * <p>
  * <h4>Notes</h4>
  * <ul>
- *     <li>....</li>
+ *     <li>The Excel column names are part of the pipeline contract and are consumed by image download and DOCX generation.</li>
+ *     <li>Pipe-separated image URLs in {@code large_url} are split into separate {@link ImageRecord} entries.</li>
+ *     <li>Missing optional columns or cells are read as empty strings during image extraction.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -68,17 +87,91 @@ import java.util.Map;
  */
 public class ExcelService
 {
+    /**
+     * Class-scoped logger used for workbook creation, workbook reading, and
+     * image-record extraction diagnostics.
+     */
     private final static MoraLogger LOGGER = MoraLogger.getLogger(ExcelService.class);
 
+    /**
+     * <h3>Create Excel workbook from post records</h3>
+     * Writes Patreon post records into the target Excel workbook.
+     * <p>
+     * If the workbook already exists, rows are appended to the configured sheet.
+     * If it does not exist, a new workbook and header row are created.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Delegates workbook creation and append behavior to the internal writer.</li>
+     *     <li>Preserves the configured sheet name used by downstream readers.</li>
+     *     <li>Writes records using stable column names expected by image and DOCX processing.</li>
+     * </ul>
+     *
+     * @param patreonPosts post records parsed from Patreon API responses
+     * @param excelOutputFilePath workbook path to create or append
+     * @param excelSheetName sheet name used for post rows
+     *
+     * @throws IOException when the workbook cannot be created, read, or written
+     * @since 1.0
+     */
     public void createExcelFromRecords(List<PostRecord> patreonPosts, Path excelOutputFilePath, String excelSheetName) throws IOException
     {
         writePostsToExcel(patreonPosts, excelOutputFilePath, excelSheetName);
     }
 
+    /**
+     * <h3>Read image records from Excel</h3>
+     * Reads image download records from the configured workbook sheet.
+     * <p>
+     * Each non-blank image URL in the {@code large_url} column becomes one
+     * {@link ImageRecord}. Pipe-separated image URLs are split into multiple
+     * image records for the same Excel row.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Delegates workbook parsing to the internal image-record reader.</li>
+     *     <li>Uses the sheet header row to locate required columns by name.</li>
+     *     <li>Builds image names from row metadata for deterministic file naming.</li>
+     * </ul>
+     *
+     * @param excelFile source workbook path
+     * @param sheetName sheet name containing post rows
+     *
+     * @return image records extracted from the workbook
+     * @throws Exception when workbook reading or row parsing fails
+     * @since 1.0
+     */
     public List<ImageRecord> readImageRecords(Path excelFile, String sheetName) throws Exception {
         return readImageRecordsFromExcel(excelFile, sheetName);
     }
 
+    /**
+     * <h3>Write post rows to Excel</h3>
+     * Creates or appends a workbook sheet using the pipeline's stable post
+     * columns.
+     * <p>
+     * The method opens an existing workbook when available and appends after the
+     * last row. Otherwise it creates a new workbook, initializes headers, and
+     * writes from the first data row.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Creates the canonical post header row when the workbook or sheet is new.</li>
+     *     <li>Writes all supplied {@link PostRecord} values into fixed column positions.</li>
+     *     <li>Applies wrapping styles and an auto-filter over the populated range.</li>
+     *     <li>Closes the workbook in a {@code finally} block after writing.</li>
+     * </ul>
+     *
+     * @param patreonPosts post records to write
+     * @param excelOutputFilePath workbook path to create or append
+     * @param excelSheetName sheet name to write
+     *
+     * @throws IOException when workbook I/O fails
+     * @since 1.0
+     */
     private void writePostsToExcel(List<PostRecord> patreonPosts, Path excelOutputFilePath, String excelSheetName) throws IOException
     {
         Workbook workbook = null;
@@ -101,6 +194,7 @@ public class ExcelService
 
         try {
             if (excelFile.exists()) {
+                // Append to the active batch workbook so paginated Patreon responses stay in one Excel job until finalization.
                 LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                                 Thread.currentThread().threadId(),
                                 Thread.currentThread().getStackTrace()),
@@ -117,6 +211,7 @@ public class ExcelService
                 }
 
             } else {
+                // Create the canonical workbook structure expected by image extraction and DOCX generation.
                 LOGGER.info(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                                 Thread.currentThread().threadId(),
                                 Thread.currentThread().getStackTrace()),
@@ -166,6 +261,13 @@ public class ExcelService
         }
     }
 
+    /**
+     * <h3>Set sheet column widths</h3>
+     * Applies fixed widths for the known Patreon post columns.
+     *
+     * @param sheet sheet whose columns should be sized
+     * @since 1.0
+     */
     private static void setColumnWithForSheet(Sheet sheet)
     {
         sheet.setColumnWidth(0, 5000);  // id
@@ -179,6 +281,16 @@ public class ExcelService
         sheet.setColumnWidth(8, 15000); // sheet.setColumnWidth(7, 15000); // large_url
     }
 
+    /**
+     * <h3>Initialize Excel header row</h3>
+     * Writes the configured column names into row {@code 0} with header styling.
+     *
+     * @param workbook workbook used to create the header style
+     * @param sheet sheet that receives the header row
+     * @param headers ordered column names to write
+     *
+     * @since 1.0
+     */
     private void initiateHeaderForExcelSheet(Workbook workbook, Sheet sheet, String[] headers)
     {
         CellStyle headerStyle = createHeaderStyle(workbook);
@@ -191,6 +303,15 @@ public class ExcelService
         }
     }
 
+    /**
+     * <h3>Create header style</h3>
+     * Creates the bold, centered, wrapped style used for workbook headers.
+     *
+     * @param workbook workbook that owns the created style
+     *
+     * @return header cell style
+     * @since 1.0
+     */
     private CellStyle createHeaderStyle(Workbook workbook) {
         Font font = workbook.createFont();
         font.setBold(true);
@@ -203,6 +324,15 @@ public class ExcelService
         return style;
     }
 
+    /**
+     * <h3>Create wrapped cell style</h3>
+     * Creates the wrapped top-aligned style used for post data cells.
+     *
+     * @param workbook workbook that owns the created style
+     *
+     * @return wrapped data cell style
+     * @since 1.0
+     */
     private CellStyle createWrapStyle(Workbook workbook) {
         CellStyle style = workbook.createCellStyle();
         style.setWrapText(true);
@@ -210,12 +340,48 @@ public class ExcelService
         return style;
     }
 
+    /**
+     * <h3>Create text cell</h3>
+     * Writes a string value into a row cell and applies the supplied style.
+     *
+     * @param row row that receives the cell
+     * @param columnIndex zero-based column index
+     * @param value text value to write
+     * @param style style to apply to the cell
+     *
+     * @since 1.0
+     */
     private void createCell(Row row, int columnIndex, String value, CellStyle style) {
         Cell cell = row.createCell(columnIndex);
         cell.setCellValue(value);
         cell.setCellStyle(style);
     }
 
+    /**
+     * <h3>Read image records from workbook</h3>
+     * Parses the source workbook and creates image download records from the
+     * {@code large_url} column.
+     * <p>
+     * The method uses row metadata to create deterministic image names. Multiple
+     * image URLs in the same cell are supported when separated by {@code |}.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Opens the workbook with Apache POI and locates the configured sheet.</li>
+     *     <li>Requires a header row and builds a column-name lookup.</li>
+     *     <li>Reads post id, publication timestamp, title, and large image URL from each row.</li>
+     *     <li>Creates one {@link ImageRecord} per non-blank image URL.</li>
+     * </ul>
+     *
+     * @param excelFilePath source workbook path
+     * @param excelSheetName sheet name containing post rows
+     *
+     * @return image download records extracted from the workbook
+     * @throws IllegalStateException when the header row is missing
+     * @throws RuntimeException when workbook reading fails
+     * @since 1.0
+     */
     private List<ImageRecord> readImageRecordsFromExcel(Path excelFilePath, String excelSheetName) {
         try (InputStream inputStream = Files.newInputStream(excelFilePath);
              Workbook workbook = new XSSFWorkbook(inputStream)) {
@@ -253,6 +419,7 @@ public class ExcelService
                 if (!imageUrl.isBlank()) {
                     List<String> images = new ArrayList<>();
                     if(imageUrl.contains("|")){
+                        // Patreon rows may contain multiple image URLs joined by '|'; each URL becomes its own download record.
                         for(String image: imageUrl.split("\\|")){
                             String trimmedImage = image.trim();
                             if (!trimmedImage.isBlank()) {
@@ -264,6 +431,7 @@ public class ExcelService
                     }
                     int index = 1;
                     for(String image : images) {
+                        // Include row metadata in the image name so downloaded files can be traced back to the source post.
                         String fileName = "D"+dateParts.getDate() + "-T" + time + "-" + id+ "-" +normalizeTitle(title)+"-"+String.format("%02d", index++);
                         items.add(new ImageRecord(r, image, fileName));
                     }
@@ -279,6 +447,16 @@ public class ExcelService
         }
     }
 
+    /**
+     * <h3>Build Excel column map</h3>
+     * Creates a lookup from header text to column index for the current sheet.
+     *
+     * @param headerRow header row from the Excel sheet
+     * @param formatter formatter used to read cell text consistently
+     *
+     * @return map of non-blank column names to zero-based column indexes
+     * @since 1.0
+     */
     private Map<String, Integer> buildColumnMap(Row headerRow, DataFormatter formatter) {
         Map<String, Integer> columnMap = new HashMap<>();
         for (Cell cell : headerRow) {
@@ -291,6 +469,7 @@ public class ExcelService
     }
 
     /**
+     * <h3>Read Excel cell text</h3>
      * Returns a trimmed string value for the requested column in the given row.
      *
      * <p>If the column does not exist in the header mapping or the cell is missing,
@@ -301,6 +480,7 @@ public class ExcelService
      * @param columnName the target column name to read
      * @param formatter the formatter used to convert cell content to text
      * @return trimmed cell text, or an empty string when unavailable
+     * @since 1.0
      */
     private String getCellValue(Row row, Map<String, Integer> columnMap, String columnName, DataFormatter formatter) {
         Integer colIndex = columnMap.get(columnName);
@@ -311,6 +491,20 @@ public class ExcelService
         return cell == null ? "" : formatter.formatCellValue(cell).trim();
     }
 
+    /**
+     * <h3>Split publication timestamp</h3>
+     * Splits a Patreon {@code published_at} timestamp into date and time parts.
+     * <p>
+     * The preferred path parses an ISO offset timestamp. If parsing fails, the
+     * method falls back to splitting on {@code T}, and finally keeps the original
+     * value as the date with an empty time.
+     * </p>
+     *
+     * @param publishedAt publication timestamp from the Excel row
+     *
+     * @return date and time parts used for image file naming
+     * @since 1.0
+     */
     private DateParts splitPublishedAt(String publishedAt) {
         DateParts result = new DateParts();
 
@@ -319,6 +513,7 @@ public class ExcelService
             result.setDate(odt.toLocalDate().toString());
             result.setTime(odt.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
         } catch (Exception e) {
+            // Preserve malformed timestamps in generated names instead of dropping the image row.
             if (publishedAt != null && publishedAt.contains("T")) {
                 String[] parts = publishedAt.split("T", 2);
                 result.setDate(parts[0]);
@@ -334,19 +529,32 @@ public class ExcelService
         return result;
     }
 
+    /**
+     * <h3>Normalize post title for file name</h3>
+     * Converts a post title into a file-name-friendly uppercase token.
+     * <p>
+     * Only alphanumeric characters and spaces are retained before spaces are
+     * collapsed into hyphen separators.
+     * </p>
+     *
+     * @param text source post title
+     *
+     * @return normalized title token, or an empty string when the input is blank
+     * @since 1.0
+     */
     private String normalizeTitle(String text) {
 
         if (text == null || text.isBlank()) {
             return "";
         }
 
-        // remove special characters except spaces
+        // Keep generated image file names portable by stripping punctuation and path-sensitive characters.
         String cleaned = text.replaceAll("[^a-zA-Z0-9 ]", "");
 
-        // convert to upper case
+        // Uppercase titles make downloaded image names easier to scan in output folders.
         cleaned = cleaned.toUpperCase();
 
-        // replace spaces with "-"
+        // Collapse repeated spaces into one hyphen-separated title token.
         return cleaned.trim().replaceAll("\\s+", "-");
     }
 

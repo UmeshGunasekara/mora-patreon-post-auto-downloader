@@ -56,21 +56,41 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The {@code DocxService} Class created for
+ * The {@code DocxService} class is created for generating DOCX reports from
+ * Patreon post Excel batches.
+ * <p>
+ * This service reads rows from the configured Excel sheet, converts post
+ * metadata and content JSON into WordprocessingML paragraphs, downloads post
+ * images for embedding, and saves a DOCX file whose name is derived from the
+ * source Excel batch name.
+ * </p>
+ *
  * <h4>Key Features</h4>
  * <ul>
- *      <li>...</li>
+ *     <li>Derives final DOCX file names from finalized Excel batch file names.</li>
+ *     <li>Reads required Excel columns such as {@code published_at}, {@code title}, {@code content_json_string}, {@code thumb_url}, and {@code large_url}.</li>
+ *     <li>Creates date, time, title, content, URL, and image sections in a DOCX document.</li>
+ *     <li>Extracts readable text from Patreon content JSON and preserves line breaks in DOCX output.</li>
+ *     <li>Embeds downloaded image bytes into the generated WordprocessingML package.</li>
  * </ul>
+ *
  * <h4>Codes</h4>
- * 1 - {@link }<br>
+ * 1 - {@link ExcelJob}<br>
+ * 2 - {@link ProcessDocxProducer}<br>
+ * 3 - {@link DateParts}<br>
+ * 4 - {@link WordprocessingMLPackage}<br>
+ *
  * <h4>Methods</h4>
  * <ul>
- *      <li>{@link }</li>
+ *     <li>{@link DocxService#createDocx(ExcelJob, Path, String, String, String)}</li>
  * </ul>
+ *
  * <p>
  * <h4>Notes</h4>
  * <ul>
- *     <li>....</li>
+ *     <li>The service depends on the Excel column names produced by {@link ExcelService}.</li>
+ *     <li>Image download failures inside document generation are logged and represented as text in the DOCX instead of failing the whole document.</li>
+ *     <li>If the Excel file name does not match the configured pattern, the generated DOCX file name falls back to {@code _tmp}.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -85,11 +105,54 @@ import java.util.regex.Pattern;
  */
 public class DocxService
 {
+    /**
+     * Class-scoped logger used for DOCX naming, image download, JSON parsing,
+     * and document generation diagnostics.
+     */
     private final static MoraLogger LOGGER = MoraLogger.getLogger(DocxService.class);
 
+    /**
+     * Shared docx4j object factory used to create WordprocessingML paragraphs,
+     * runs, text, drawings, and style objects.
+     */
     private static final ObjectFactory WML_OBJECT_FACTORY = Context.getWmlObjectFactory();
+
+    /**
+     * Intended image request timeout used by image download request construction
+     * when timeout configuration is enabled.
+     */
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
 
+    /**
+     * <h3>Create DOCX report</h3>
+     * Creates a DOCX report for the supplied Excel job and records the generated
+     * DOCX path on the job.
+     * <p>
+     * The final DOCX name is derived from the Excel file name using the supplied
+     * regular expression and temporary DOCX file name pattern. The method then
+     * delegates workbook reading and document writing to the internal DOCX writer.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Derives the final DOCX file name with {@link DocxService#getFinalDocxFileName(String, String, String)}.</li>
+     *     <li>Resolves the final output path under the configured DOCX output directory.</li>
+     *     <li>Stores the generated DOCX path on the {@link ExcelJob}.</li>
+     *     <li>Writes the DOCX content from the job Excel file and configured sheet.</li>
+     * </ul>
+     *
+     * @param job Excel job containing the finalized Excel file path
+     * @param docxOutputDirPath directory where the DOCX report should be written
+     * @param docxFileNamePattern regular expression used to extract the Excel batch suffix
+     * @param tempDocxFileName DOCX file name template containing {@code temp}
+     * @param excelSheetName Excel sheet name containing post records
+     *
+     * @throws IOException when the Excel workbook cannot be read or DOCX output cannot be written
+     * @throws Docx4JException when docx4j cannot create or save document content
+     *
+     * @apiNote The job must have a non-null Excel file path before this method is called.
+     * @since 1.0
+     */
     public void createDocx(ExcelJob job, Path docxOutputDirPath, String docxFileNamePattern, String tempDocxFileName, String excelSheetName) throws
             IOException,
             Docx4JException
@@ -108,6 +171,33 @@ public class DocxService
         writeOnDocxFromExcel(job.getExcelFile().toString(), docxFilePath.toString(), excelSheetName);
     }
 
+    /**
+     * <h3>Write DOCX content from Excel</h3>
+     * Reads a Patreon post Excel workbook and writes its rows into a new DOCX
+     * document.
+     * <p>
+     * The document is grouped by publication date. Each post contributes a time
+     * heading, post id, title, optional embedded images, readable content text,
+     * and Patreon URL.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Opens the Excel workbook and validates that a header row exists.</li>
+     *     <li>Builds a column-name map so rows can be read by stable column names.</li>
+     *     <li>Uses thumbnail URLs first and falls back to large image URLs when thumbnails are missing.</li>
+     *     <li>Downloads and embeds images while keeping document generation alive if one image fails.</li>
+     *     <li>Saves the generated WordprocessingML package to the requested DOCX path.</li>
+     * </ul>
+     *
+     * @param excelFilePath source Excel workbook path
+     * @param docxFilePath target DOCX file path
+     * @param excelSheetName sheet name containing post records
+     *
+     * @throws IOException when the workbook cannot be read or the DOCX file cannot be written
+     * @throws Docx4JException when docx4j cannot create or save document content
+     * @since 1.0
+     */
     private void writeOnDocxFromExcel(String excelFilePath, String docxFilePath, String excelSheetName) throws
             IOException, Docx4JException
     {
@@ -143,12 +233,14 @@ public class DocxService
 
                 String imageUrl = getCellValue(row, columnMap, "thumb_url", formatter);
                 if (imageUrl.isBlank()) {
+                    // Prefer thumbnails for smaller DOCX output, but fall back to large images when thumbnails are missing.
                     imageUrl = getCellValue(row, columnMap, "large_url", formatter);
                 }
 
                 DateParts dateParts = splitPublishedAt(publishedAt);
 
                 if (!Objects.equals(currentDate, dateParts.getDate())) {
+                    // Add a new date heading only when the sorted Excel rows move to a different publication date.
                     wordMLPackage.getMainDocumentPart().addObject(createStyledParagraph(dateParts.getDate(), "Heading2"));
                     currentDate = dateParts.getDate();
                 }
@@ -183,6 +275,7 @@ public class DocxService
                             LOGGER.error(new MoraLoggerThreadInfo(Thread.currentThread().getName(),
                                             Thread.currentThread().threadId(),
                                             Thread.currentThread().getStackTrace()), ex);
+                            // Keep the report readable even when one remote image cannot be embedded.
                             wordMLPackage.getMainDocumentPart().addObject(
                                     createParagraph("[Image download failed] " + image)
                             );
@@ -201,6 +294,29 @@ public class DocxService
         }
     }
 
+    /**
+     * <h3>Resolve final DOCX file name</h3>
+     * Builds the final DOCX file name from a completed Excel batch file name.
+     * <p>
+     * The configured Excel pattern is matched against the Excel file name. When
+     * a match exists, group {@code 1} replaces {@code temp} in the configured
+     * temporary DOCX file name.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Compiles and applies the configured Excel file-name regular expression.</li>
+     *     <li>Uses the first captured group as the DOCX batch suffix.</li>
+     *     <li>Returns {@code _tmp} when the Excel file name does not match.</li>
+     * </ul>
+     *
+     * @param excelFileName finalized Excel file name
+     * @param docxFileNamePattern regular expression expected to capture the batch suffix in group {@code 1}
+     * @param tempDocxFileName temporary DOCX file name template containing {@code temp}
+     *
+     * @return resolved DOCX file name, or {@code _tmp} when the pattern does not match
+     * @since 1.0
+     */
     private String getFinalDocxFileName(String excelFileName, String docxFileNamePattern, String tempDocxFileName)
     {
         Pattern pattern = Pattern.compile(docxFileNamePattern);
@@ -215,6 +331,17 @@ public class DocxService
         return "_tmp";
     }
 
+    /**
+     * <h3>Build Excel column map</h3>
+     * Creates a lookup from header text to column index for the current Excel
+     * sheet.
+     *
+     * @param headerRow header row from the Excel sheet
+     * @param formatter formatter used to read cell text consistently
+     *
+     * @return map of non-blank column names to zero-based column indexes
+     * @since 1.0
+     */
     private Map<String, Integer> buildColumnMap(Row headerRow, DataFormatter formatter) {
         Map<String, Integer> map = new HashMap<>();
         for (Cell cell : headerRow) {
@@ -226,6 +353,22 @@ public class DocxService
         return map;
     }
 
+    /**
+     * <h3>Read Excel cell text</h3>
+     * Reads a trimmed string value from the requested column in the supplied row.
+     * <p>
+     * Missing columns and missing cells are treated as empty strings so optional
+     * DOCX fields can be omitted without failing document generation.
+     * </p>
+     *
+     * @param row row containing post data
+     * @param columnMap header-name to column-index lookup
+     * @param columnName column name to read
+     * @param formatter formatter used to convert cell values to text
+     *
+     * @return trimmed cell text, or an empty string when the value is unavailable
+     * @since 1.0
+     */
     private String getCellValue(Row row, Map<String, Integer> columnMap, String columnName, DataFormatter formatter) {
         Integer colIndex = columnMap.get(columnName);
         if (colIndex == null) {
@@ -235,6 +378,20 @@ public class DocxService
         return cell == null ? "" : formatter.formatCellValue(cell).trim();
     }
 
+    /**
+     * <h3>Split publication timestamp</h3>
+     * Splits a Patreon {@code published_at} timestamp into date and time parts.
+     * <p>
+     * The preferred path parses the timestamp as an {@link OffsetDateTime}. When
+     * parsing fails, the method falls back to splitting on {@code T}, then to
+     * preserving the original value as the date.
+     * </p>
+     *
+     * @param publishedAt Patreon publication timestamp text
+     *
+     * @return date and time parts used for DOCX headings
+     * @since 1.0
+     */
     private DateParts splitPublishedAt(String publishedAt) {
         DateParts result = new DateParts();
 
@@ -243,6 +400,7 @@ public class DocxService
             result.setDate(odt.toLocalDate().toString());
             result.setTime(odt.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
         } catch (Exception e) {
+            // Keep malformed timestamps visible in the report instead of dropping the row.
             if (publishedAt != null && publishedAt.contains("T")) {
                 String[] parts = publishedAt.split("T", 2);
                 result.setDate(parts[0]);
@@ -258,6 +416,16 @@ public class DocxService
         return result;
     }
 
+    /**
+     * <h3>Create styled paragraph</h3>
+     * Creates a WordprocessingML paragraph with a named Word style.
+     *
+     * @param text paragraph text; {@code null} is rendered as an empty string
+     * @param styleName Word style name such as {@code Heading2}, {@code Heading3}, or {@code Heading4}
+     *
+     * @return styled WordprocessingML paragraph
+     * @since 1.0
+     */
     private P createStyledParagraph(String text, String styleName) {
         P p = WML_OBJECT_FACTORY.createP();
 
@@ -276,6 +444,15 @@ public class DocxService
         return p;
     }
 
+    /**
+     * <h3>Create plain paragraph</h3>
+     * Creates a plain WordprocessingML paragraph containing one text run.
+     *
+     * @param text paragraph text; {@code null} is rendered as an empty string
+     *
+     * @return plain WordprocessingML paragraph
+     * @since 1.0
+     */
     private P createParagraph(String text) {
         P p = WML_OBJECT_FACTORY.createP();
         R run = WML_OBJECT_FACTORY.createR();
@@ -286,6 +463,16 @@ public class DocxService
         return p;
     }
 
+    /**
+     * <h3>Create multiline paragraph</h3>
+     * Creates a WordprocessingML paragraph that preserves line breaks from the
+     * supplied text.
+     *
+     * @param text multiline text extracted from Patreon content JSON
+     *
+     * @return paragraph containing text runs separated by Word line breaks
+     * @since 1.0
+     */
     private P createMultilineParagraph(String text) {
         P p = WML_OBJECT_FACTORY.createP();
 
@@ -304,6 +491,7 @@ public class DocxService
             p.getContent().add(run);
 
             if (i < lines.length - 1) {
+                // WordprocessingML requires an explicit break element to preserve line boundaries inside one paragraph.
                 R breakRun = WML_OBJECT_FACTORY.createR();
                 Br br = WML_OBJECT_FACTORY.createBr();
                 breakRun.getContent().add(br);
@@ -314,6 +502,17 @@ public class DocxService
         return p;
     }
 
+    /**
+     * <h3>Download image bytes</h3>
+     * Downloads a remote image URL for embedding in the DOCX report.
+     *
+     * @param client HTTP client used for the request
+     * @param imageUrl image URL read from the Excel workbook
+     *
+     * @return downloaded image bytes
+     * @throws Exception when the request fails or returns a non-success HTTP status
+     * @since 1.0
+     */
     private byte[] downloadImage(HttpClient client, String imageUrl) throws Exception {
 //        URI uri = URI.create(imageUrl.trim());
 //        HttpRequest request = HttpRequest.newBuilder(uri)
@@ -338,6 +537,22 @@ public class DocxService
         return response.body();
     }
 
+    /**
+     * <h3>Create image paragraph</h3>
+     * Embeds image bytes in the WordprocessingML package and returns a paragraph
+     * containing the drawing.
+     *
+     * @param wordMLPackage target WordprocessingML package that owns the image part
+     * @param bytes image bytes to embed
+     * @param id base drawing id used by docx4j
+     * @param filenameHint filename hint passed to docx4j for the image inline
+     * @param widthPx requested display width in pixels
+     * @param heightPx requested display height in pixels
+     *
+     * @return paragraph containing the embedded image drawing
+     * @throws Exception when docx4j cannot create the image part or inline drawing
+     * @since 1.0
+     */
     private P createImageParagraph(
             WordprocessingMLPackage wordMLPackage,
             byte[] bytes,
@@ -366,10 +581,34 @@ public class DocxService
         return paragraph;
     }
 
+    /**
+     * <h3>Convert pixels to EMU</h3>
+     * Converts a pixel measurement into English Metric Units used by Word
+     * drawing dimensions.
+     *
+     * @param px pixel measurement
+     *
+     * @return equivalent EMU measurement
+     * @since 1.0
+     */
     private long pxToEmu(int px) {
         return Math.round(px * 9525L);
     }
 
+    /**
+     * <h3>Extract readable content text</h3>
+     * Extracts human-readable text from Patreon {@code content_json_string}.
+     * <p>
+     * When JSON parsing succeeds, all nested text nodes are appended into a
+     * readable string. When parsing fails, the original content string is
+     * returned so report generation can continue.
+     * </p>
+     *
+     * @param contentJsonString serialized Patreon content JSON from the Excel row
+     *
+     * @return readable text extracted from JSON, original content on parse failure, or an empty string when input is blank
+     * @since 1.0
+     */
     private String extractReadableText(String contentJsonString) {
         if (contentJsonString == null || contentJsonString.isBlank()) {
             return "";
@@ -391,6 +630,20 @@ public class DocxService
         }
     }
 
+    /**
+     * <h3>Append JSON text nodes</h3>
+     * Recursively traverses a Patreon content JSON tree and appends text values
+     * to the supplied builder.
+     * <p>
+     * Paragraph nodes add blank-line separation before their text when previous
+     * text already exists.
+     * </p>
+     *
+     * @param node current JSON node being traversed
+     * @param sb output builder receiving readable text
+     *
+     * @since 1.0
+     */
     private void appendTextNodes(JsonNode node, StringBuilder sb) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return;
@@ -400,6 +653,7 @@ public class DocxService
             String type = node.path("type").asText("");
 
             if ("paragraph".equals(type) && sb.length() > 0 && !sb.toString().endsWith(System.lineSeparator() + System.lineSeparator())) {
+                // Separate Patreon paragraph blocks so DOCX text remains readable after JSON flattening.
                 sb.append(System.lineSeparator()).append(System.lineSeparator());
             }
 

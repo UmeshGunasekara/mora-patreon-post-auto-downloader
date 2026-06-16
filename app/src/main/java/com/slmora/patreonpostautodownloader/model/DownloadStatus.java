@@ -8,21 +8,38 @@
 package com.slmora.patreonpostautodownloader.model;
 
 /**
- * The {@code DownloadStatus} Enum created for
+ * The {@code DownloadStatus} enum is created for representing the download
+ * state of an individual {@link ImageRecord}.
+ * <p>
+ * Image download and retry services update this status while attempting to
+ * fetch images referenced by an {@link ExcelJob}. Process workers inspect these
+ * values to decide whether a job can proceed to DOCX generation, retry, or
+ * failed-job persistence.
+ * </p>
+ *
  * <h4>Key Features</h4>
  * <ul>
- *      <li>...</li>
+ *     <li>Tracks per-image download progress independently from job-level status.</li>
+ *     <li>Supports retry decisions by marking failed image records.</li>
+ *     <li>Provides simple enum constants that can be written to failed-job details.</li>
  * </ul>
+ *
  * <h4>Codes</h4>
- * 1 - {@link }<br>
+ * 1 - {@link ImageRecord}<br>
+ * 2 - {@link ExcelJob}<br>
+ * 3 - {@link JobStatus}<br>
+ *
  * <h4>Methods</h4>
  * <ul>
- *      <li>{@link }</li>
+ *     <li>{@link DownloadStatus#valueOf(String)}</li>
+ *     <li>{@link DownloadStatus#values()}</li>
  * </ul>
+ *
  * <p>
  * <h4>Notes</h4>
  * <ul>
- *     <li>....</li>
+ *     <li>This enum describes image-level state; batch lifecycle state is represented by {@link JobStatus}.</li>
+ *     <li>State transitions are performed by image download and retry services.</li>
  * </ul>
  *
  * @author: SLMORA
@@ -37,7 +54,18 @@ package com.slmora.patreonpostautodownloader.model;
  */
 public enum DownloadStatus
 {
+    /**
+     * Image has been discovered but no download result has been recorded yet.
+     */
     PENDING,
+
+    /**
+     * Image was downloaded successfully and its output path should be available.
+     */
     SUCCESS,
+
+    /**
+     * Image download failed and error details should be stored on the image record.
+     */
     FAILED
 }
