@@ -289,7 +289,6 @@ public class PipelineConfig
                     ", processDocxThreads=" + processDocxThreads +
                     ", processExcelThreads=" + processExcelThreads +
                     ", maxRetry=" + maxRetry +
-                    ", patreonAccessCookie=" + patreonAccessCookie +
                     ", patreonAccessCookie='***'" +
                     '}';
         }

@@ -18,6 +18,8 @@ import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.tasks.Jar
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
+import org.gradle.testing.jacoco.tasks.JacocoReport
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import org.gradle.api.publish.maven.MavenPublication
@@ -28,6 +30,7 @@ plugins {
     java
     idea
     `maven-publish`
+    jacoco
 }
 
 //Project Artifact Information
@@ -102,6 +105,11 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:${junitJupiterVersion}")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitJupiterVersion}")
     testImplementation("org.junit.jupiter:junit-jupiter-params:${junitJupiterVersion}")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
+    testImplementation("org.mockito:mockito-inline:5.2.0")
+    testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("org.hamcrest:hamcrest:2.2")
 
     // Excel
     implementation("org.apache.poi:poi-ooxml:5.4.0")
@@ -149,6 +157,24 @@ configure<SourceSetContainer> {
 tasks.named<Test>("test") {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+    finalizedBy(tasks.named("jacocoTestReport"))
+}
+
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.named("test"))
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+}
+
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.named("test"))
 }
 
 tasks.withType<JavaCompile>().configureEach {
