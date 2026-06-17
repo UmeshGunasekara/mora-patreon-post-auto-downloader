@@ -16,11 +16,91 @@ import java.util.zip.ZipFile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * The {@code DocxServiceTest} test class is created for verifying DOCX report
+ * generation behavior implemented by {@link DocxService}.
+ * <p>
+ * It focuses on generating DOCX files from Excel workbooks, resolving output
+ * file names from finalized Excel batch names, validating required workbook
+ * structure, handling image download failures, and extracting readable text from
+ * Patreon content JSON.
+ * </p>
+ *
+ * <h4>Key Features</h4>
+ * <ul>
+ *     <li>Verifies successful DOCX creation assigns the generated path to an {@link ExcelJob}.</li>
+ *     <li>Verifies filename fallback behavior when the source Excel name does not match the configured pattern.</li>
+ *     <li>Verifies missing Excel header rows fail fast with a clear exception.</li>
+ *     <li>Verifies DOCX generation continues when an image URL cannot be downloaded.</li>
+ *     <li>Verifies optional columns and mixed content JSON are handled without stopping report generation.</li>
+ * </ul>
+ *
+ * <h4>Codes</h4>
+ * 1 - {@link DocxService}<br>
+ * 2 - {@link ExcelJob}<br>
+ * 3 - {@link ExcelJobTestBuilder}<br>
+ * 4 - {@link XSSFWorkbook}<br>
+ *
+ * <h4>Methods</h4>
+ * <ul>
+ *     <li>{@link DocxServiceTest#GivenValidExcelAndMatchingPattern_WhenCreateDocx_ThenDocxFileIsCreatedAndAssignedToJob()}</li>
+ *     <li>{@link DocxServiceTest#GivenNonMatchingPattern_WhenCreateDocx_ThenFallbackTmpDocxNameIsUsed()}</li>
+ *     <li>{@link DocxServiceTest#GivenExcelWithoutHeaderRow_WhenCreateDocx_ThenIllegalStateExceptionIsThrown()}</li>
+ *     <li>{@link DocxServiceTest#GivenImageUrlDownloadFails_WhenCreateDocx_ThenDocxStillGeneratedWithFallbackImageText()}</li>
+ *     <li>{@link DocxServiceTest#GivenMissingOptionalColumnsAndMixedContentJson_WhenCreateDocx_ThenDocxContainsExtractedAndFallbackText()}</li>
+ *     <li>{@link DocxServiceTest#createExcelFile(Path, boolean, String, String)}</li>
+ *     <li>{@link DocxServiceTest#readWordDocumentXml(Path)}</li>
+ * </ul>
+ *
+ * <p>
+ * <h4>Notes</h4>
+ * <ul>
+ *     <li>All workbooks and DOCX files are written under JUnit's {@link TempDir} directory.</li>
+ *     <li>The tests inspect {@code word/document.xml} directly when text-content assertions are required.</li>
+ * </ul>
+ *
+ * @author: SLMORA
+ * @since 1.0
+ *
+ * <h4>Revision History</h4>
+ * <blockquote><pre>
+ * <br>Version      Date            Editor              Note
+ * <br>-------------------------------------------------------
+ * <br>1.0          6/6/2026       SLMORA              Initial Code
+ * </pre></blockquote>
+ */
 class DocxServiceTest {
 
+    /**
+     * Temporary directory used for generated Excel workbook and DOCX report
+     * fixtures.
+     */
     @TempDir
     Path tempDir;
 
+    /**
+     * <h3>Create DOCX with derived batch file name</h3>
+     * Verifies that {@link DocxService#createDocx(ExcelJob, Path, String, String, String)}
+     * creates a DOCX report and stores the generated path on the job when the
+     * Excel file name matches the configured pattern.
+     * <p>
+     * This test targets the normal file naming path used by finalized Excel
+     * batches.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Creates a workbook whose file name contains a date range and job id.</li>
+     *     <li>Invokes DOCX generation with a matching Excel filename pattern.</li>
+     *     <li>Asserts the job receives a DOCX path containing the extracted batch suffix.</li>
+     *     <li>Asserts the DOCX file exists on disk.</li>
+     * </ul>
+     *
+     * @throws Exception when workbook creation or DOCX generation fails
+     * @since 1.0
+     *
+     * @see DocxService#createDocx(ExcelJob, Path, String, String, String)
+     */
     @Test
     void GivenValidExcelAndMatchingPattern_WhenCreateDocx_ThenDocxFileIsCreatedAndAssignedToJob() throws Exception {
         // Arrange
@@ -50,6 +130,28 @@ class DocxServiceTest {
         assertThat(Files.exists(job.getDocxFile())).isTrue();
     }
 
+    /**
+     * <h3>Use fallback DOCX name for non-matching Excel file</h3>
+     * Verifies that {@link DocxService#createDocx(ExcelJob, Path, String, String, String)}
+     * uses the fallback {@code _tmp} file name when the Excel file name does not
+     * match the configured extraction pattern.
+     * <p>
+     * This test targets the defensive filename fallback path.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Creates a valid workbook with a file name outside the expected batch pattern.</li>
+     *     <li>Invokes DOCX generation with the standard pattern.</li>
+     *     <li>Asserts the generated file name is {@code _tmp}.</li>
+     *     <li>Asserts the fallback DOCX file exists.</li>
+     * </ul>
+     *
+     * @throws Exception when workbook creation or DOCX generation fails
+     * @since 1.0
+     *
+     * @see DocxService#createDocx(ExcelJob, Path, String, String, String)
+     */
     @Test
     void GivenNonMatchingPattern_WhenCreateDocx_ThenFallbackTmpDocxNameIsUsed() throws Exception {
         // Arrange
@@ -75,6 +177,27 @@ class DocxServiceTest {
         assertThat(Files.exists(job.getDocxFile())).isTrue();
     }
 
+    /**
+     * <h3>Reject workbook without header row</h3>
+     * Verifies that {@link DocxService#createDocx(ExcelJob, Path, String, String, String)}
+     * throws {@link IllegalStateException} when the configured sheet does not
+     * contain a header row.
+     * <p>
+     * This test targets workbook structure validation before row mapping begins.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Creates an Excel workbook without a header row.</li>
+     *     <li>Invokes DOCX generation.</li>
+     *     <li>Asserts the exception type and message identify the missing header row.</li>
+     * </ul>
+     *
+     * @throws Exception when workbook fixture setup fails
+     * @since 1.0
+     *
+     * @see DocxService#createDocx(ExcelJob, Path, String, String, String)
+     */
     @Test
     void GivenExcelWithoutHeaderRow_WhenCreateDocx_ThenIllegalStateExceptionIsThrown() throws Exception {
         // Arrange
@@ -97,6 +220,28 @@ class DocxServiceTest {
                 .hasMessageContaining("Excel header row is missing");
     }
 
+    /**
+     * <h3>Generate DOCX when image download fails</h3>
+     * Verifies that a failing remote image URL does not prevent
+     * {@link DocxService#createDocx(ExcelJob, Path, String, String, String)}
+     * from producing the DOCX report.
+     * <p>
+     * This test targets the image embedding fallback where the service writes
+     * fallback image text instead of failing the whole document.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Creates a workbook with an unreachable image URL.</li>
+     *     <li>Invokes DOCX generation.</li>
+     *     <li>Asserts the job receives a DOCX path and the file exists.</li>
+     * </ul>
+     *
+     * @throws Exception when workbook creation or DOCX generation fails unexpectedly
+     * @since 1.0
+     *
+     * @see DocxService#createDocx(ExcelJob, Path, String, String, String)
+     */
     @Test
     void GivenImageUrlDownloadFails_WhenCreateDocx_ThenDocxStillGeneratedWithFallbackImageText() throws Exception {
         // Arrange
@@ -122,6 +267,28 @@ class DocxServiceTest {
         assertThat(Files.exists(job.getDocxFile())).isTrue();
     }
 
+    /**
+     * <h3>Handle optional columns and mixed content JSON</h3>
+     * Verifies that DOCX generation tolerates missing optional URL/image
+     * columns and writes both fallback raw text and extracted nested JSON text.
+     * <p>
+     * This test targets the workbook column lookup and content JSON text
+     * extraction branches.
+     * </p>
+     *
+     * <p><b>Detailed Description:</b></p>
+     * <ul>
+     *     <li>Creates a workbook that omits {@code patreon_url}, {@code large_url}, and {@code thumb_url} headers.</li>
+     *     <li>Adds one row with malformed content JSON and one row with nested paragraph JSON.</li>
+     *     <li>Generates a DOCX report from the workbook.</li>
+     *     <li>Reads {@code word/document.xml} and asserts raw fallback and extracted text are present.</li>
+     * </ul>
+     *
+     * @throws Exception when workbook creation, DOCX generation, or DOCX XML reading fails
+     * @since 1.0
+     *
+     * @see DocxService#createDocx(ExcelJob, Path, String, String, String)
+     */
     @Test
     void GivenMissingOptionalColumnsAndMixedContentJson_WhenCreateDocx_ThenDocxContainsExtractedAndFallbackText() throws Exception {
         // Arrange
@@ -176,6 +343,18 @@ class DocxServiceTest {
         assertThat(xml).contains("second");
     }
 
+    /**
+     * <h3>Create Excel workbook fixture</h3>
+     * Creates a minimal Excel workbook used by DOCX generation tests.
+     *
+     * @param excelFile target workbook path
+     * @param withHeader whether the workbook should include the expected header row and one data row
+     * @param thumbUrl thumbnail image URL value to write into the row
+     * @param largeUrl large image URL value to write into the row
+     *
+     * @throws IOException when the workbook cannot be written
+     * @since 1.0
+     */
     private void createExcelFile(Path excelFile, boolean withHeader, String thumbUrl, String largeUrl) throws IOException {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             var sheet = workbook.createSheet("Posts");
@@ -206,6 +385,17 @@ class DocxServiceTest {
         }
     }
 
+    /**
+     * <h3>Read generated Word document XML</h3>
+     * Opens a generated DOCX package and returns the main document XML content
+     * for text assertions.
+     *
+     * @param docxPath generated DOCX file path
+     *
+     * @return UTF-8 text from {@code word/document.xml}
+     * @throws IOException when the DOCX zip package or document entry cannot be read
+     * @since 1.0
+     */
     private String readWordDocumentXml(Path docxPath) throws IOException {
         try (ZipFile zip = new ZipFile(docxPath.toFile())) {
             var entry = zip.getEntry("word/document.xml");
